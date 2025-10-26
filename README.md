@@ -9,7 +9,7 @@ Comprehensive benchmarking tool for Large Language Models (LLMs) running locally
 - **System Information Collection**: Auto-captures GPU, CPU, RAM, OS details in results
 - **Multiple Export Formats**: Markdown, JSON, and CSV outputs for analysis
 - **Results Comparison Tool**: Compare benchmarks across runs to track improvements
-- **Diverse Test Suite**: 7 prompts testing technical knowledge, logic, system design, ethics, and problem-solving
+- **Diverse Test Suite**: 5 optimized prompts testing technical knowledge, logic, system design, and analytical thinking
 - **Model Management**: Automatic model offloading between tests for fair comparisons
 - **Concurrent Run Protection**: Lock files prevent simultaneous benchmarks
 - **Progress Tracking**: Real-time progress indicators and streaming responses
@@ -20,16 +20,15 @@ Comprehensive benchmarking tool for Large Language Models (LLMs) running locally
 
 ## 📊 What Gets Tested
 
-The benchmark includes 7 carefully designed prompts that test:
+The benchmark includes 5 optimized prompts that test:
 
 | Category | Test Type | What It Measures |
 |----------|-----------|------------------|
-| 🔧 Technical Knowledge | Kubernetes, DevOps/SRE | Domain expertise, infrastructure understanding |
+| 🔧 Technical Knowledge | Kubernetes StatefulSets vs Deployments | Domain expertise, infrastructure understanding |
+| 👥 Technical Comparison | DevOps vs SRE Roles | Comparative analysis, organizational concepts |
 | 🎯 Logical Reasoning | 12 Balls Puzzle | Pure logic, algorithmic thinking |
-| 🏗️ System Design | URL Shortener | Architecture skills, scalability thinking |
-| 💻 Analytical Thinking | Language Performance | Technical depth, comparative analysis |
-| 🌍 Problem-Solving | Remote Team Collaboration | Practical solutions, strategic thinking |
-| ⚖️ Ethical Reasoning | AI Bias Decision | Multi-perspective analysis, nuanced judgment |
+| 🏗️ System Design | URL Shortener Architecture | Architecture skills, scalability thinking |
+| 💻 Analytical Thinking | Language Performance Analysis | Technical depth, comparative analysis |
 
 ## 🚀 Quick Start
 
@@ -164,10 +163,10 @@ python3 extended_benchmark.py
 
 This runs the full benchmark suite:
 - **Models**: All 4 downloaded models
-- **Prompts**: All 7 default prompts
-- **Runs**: 2 per prompt per model (56 total runs)
+- **Prompts**: All 5 default prompts
+- **Runs**: 2 per prompt per model (40 total runs)
 - **Output**: `benchmark_results_YYYYMMDD_HHMMSS.md`
-- **Duration**: ~60-90 minutes
+- **Duration**: ~40-50 minutes
 
 ### Quick Test (Single Model)
 
@@ -175,7 +174,7 @@ This runs the full benchmark suite:
 python3 extended_benchmark.py --models "qwen3-coder:30b" --runs-per-prompt 1
 ```
 
-**Result**: Tests fastest model with 7 prompts (1 run each) in ~5-10 minutes
+**Result**: Tests fastest model with 5 prompts (1 run each) in ~5-8 minutes
 
 ### Test Specific Models
 

@@ -908,13 +908,7 @@ def main():
             "Design a URL shortening service (like bit.ly) that can handle 1 billion shortened URLs and 10 million requests per day. Explain your architecture, database design, caching strategy, and how you would ensure high availability, reliability, and scalability.",
 
             # Analytical and comparative thinking
-            "Explain why some programming languages are significantly faster than others at runtime. Compare compiled languages (like C++, Rust) versus interpreted languages (like Python, JavaScript), discuss JIT compilation, and explain the trade-offs between development speed and execution speed with real-world examples.",
-
-            # Problem-solving and strategy
-            "A remote engineering team of 50 people across 8 different time zones is struggling with communication gaps, delayed decisions, and decreased productivity. Design a comprehensive solution that includes specific tools, processes, meeting structures, and cultural practices to improve team effectiveness and collaboration.",
-
-            # Ethical reasoning and decision-making
-            "A company's AI hiring model is 95% accurate overall but has a discovered 2% bias against certain demographic groups in its recommendations. The company has invested 2 years and significant resources into this model. Analyze this situation from multiple perspectives: legal, ethical, business, and technical. What factors should influence their decision, and what would you recommend?"
+            "Explain why some programming languages are significantly faster than others at runtime. Compare compiled languages (like C++, Rust) versus interpreted languages (like Python, JavaScript), discuss JIT compilation, and explain the trade-offs between development speed and execution speed with real-world examples."
         ],
         help="Prompts to use for benchmarking"
     )
