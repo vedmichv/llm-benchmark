@@ -637,6 +637,33 @@ def main():
 
     args = parser.parse_args()
 
+    # Cache sudo credentials at the start (if model offloading is enabled)
+    if not args.no_offload:
+        print("\n🔑 Caching sudo credentials for model offloading...")
+        try:
+            result = subprocess.run(
+                ["sudo", "-v"],
+                timeout=30
+            )
+            if result.returncode == 0:
+                print("✓ Sudo credentials cached")
+                # Keep sudo alive in background
+                subprocess.Popen(
+                    ["bash", "-c", "while true; do sudo -v; sleep 60; done"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            else:
+                print("⚠️  Warning: Could not cache sudo credentials")
+                print("    You may be prompted for password during model offloading")
+        except subprocess.TimeoutExpired:
+            print("⚠️  Sudo credential timeout - continuing without cached credentials")
+        except KeyboardInterrupt:
+            print("\n✗ Cancelled by user")
+            return 1
+        except Exception as e:
+            print(f"⚠️  Could not cache sudo: {e}")
+
     # Generate timestamped output filename if not specified
     if args.output is None:
         if args.no_timestamp:

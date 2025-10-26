@@ -109,7 +109,31 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Step 4: Verify Setup
+### Step 4: (Optional) Setup Passwordless Sudo
+
+The benchmark needs sudo to offload models between tests. You have two options:
+
+**Option A: Enter password once per session** (Default)
+- Script caches sudo credentials at start
+- Prompts for password once, then auto-renews
+- No configuration needed
+
+**Option B: Configure passwordless sudo** (Recommended for automation)
+```bash
+# Run the setup script
+./setup_passwordless_sudo.sh
+
+# This creates /etc/sudoers.d/ollama-benchmark
+# Allows passwordless: pkill, journalctl, pgrep
+```
+
+**Option C: Skip offloading** (Fast but less accurate)
+```bash
+# Run without model offloading (no sudo needed)
+python3 extended_benchmark.py --no-offload
+```
+
+### Step 5: Verify Setup
 
 Test that everything is working:
 
