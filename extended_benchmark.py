@@ -843,6 +843,15 @@ def save_results_to_csv(summaries: List[ModelBenchmarkSummary], output_file: str
             writer.writerow(["Run #", "Prompt", "Success", "Response (t/s)", "Response Tokens", "Total Time (s)", "Error"])
 
             for idx, run in enumerate(summary.runs):
+                # Clean error message for CSV (remove newlines)
+                error_msg = ""
+                if run.error:
+                    # Replace newlines with semicolons, limit length
+                    error_msg = run.error.replace('\n', '; ').replace('\r', '')
+                    # Take first line or first 100 chars
+                    if len(error_msg) > 100:
+                        error_msg = error_msg[:100] + "..."
+
                 writer.writerow([
                     idx + 1,
                     run.prompt[:60] + "..." if len(run.prompt) > 60 else run.prompt,
@@ -850,7 +859,7 @@ def save_results_to_csv(summaries: List[ModelBenchmarkSummary], output_file: str
                     f"{run.response_ts:.2f}" if run.success else "",
                     run.response_tokens if run.success else "",
                     f"{run.total_time:.2f}" if run.success else "",
-                    run.error or ""
+                    error_msg
                 ])
 
             writer.writerow([])
