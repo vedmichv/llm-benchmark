@@ -9,6 +9,8 @@ import argparse
 import subprocess
 import sys
 import time
+import os
+import atexit
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict
@@ -16,6 +18,65 @@ import signal
 
 import ollama
 from pydantic import BaseModel, Field, field_validator
+
+# Lock file management
+LOCK_FILE = "/tmp/ollama_benchmark.lock"
+
+def create_lock_file():
+    """Create lock file to prevent concurrent benchmark runs"""
+    if os.path.exists(LOCK_FILE):
+        # Check if the process is still running
+        try:
+            with open(LOCK_FILE, 'r') as f:
+                old_pid = int(f.read().strip())
+
+            # Check if process exists
+            try:
+                os.kill(old_pid, 0)  # Signal 0 just checks if process exists
+                print(f"\n✗ Error: Another benchmark is already running (PID: {old_pid})")
+                print(f"   Lock file: {LOCK_FILE}")
+                print(f"\n   If this is incorrect, remove the lock file:")
+                print(f"   rm {LOCK_FILE}")
+                return False
+            except OSError:
+                # Process doesn't exist - stale lock file
+                print(f"⚠️  Removing stale lock file from PID {old_pid}")
+                os.remove(LOCK_FILE)
+        except (ValueError, IOError):
+            # Invalid lock file
+            print(f"⚠️  Removing invalid lock file")
+            os.remove(LOCK_FILE)
+
+    # Create new lock file with current PID
+    try:
+        with open(LOCK_FILE, 'w') as f:
+            f.write(str(os.getpid()))
+        print(f"✓ Lock file created: {LOCK_FILE}")
+        return True
+    except Exception as e:
+        print(f"⚠️  Warning: Could not create lock file: {e}")
+        return True  # Continue anyway
+
+def remove_lock_file():
+    """Remove lock file on exit"""
+    try:
+        if os.path.exists(LOCK_FILE):
+            os.remove(LOCK_FILE)
+    except:
+        pass
+
+# Register cleanup
+atexit.register(remove_lock_file)
+
+def signal_handler(signum, frame):
+    """Handle Ctrl+C and other signals - cleanup and exit"""
+    print("\n\n⚠️  Benchmark interrupted by user")
+    remove_lock_file()
+    sys.exit(1)
+
+# Register signal handlers for cleanup
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # Timeout handler
 class TimeoutError(Exception):
@@ -636,6 +697,11 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Create lock file to prevent concurrent runs
+    print("\n🔒 Checking for concurrent benchmark runs...")
+    if not create_lock_file():
+        return 1
 
     # Cache sudo credentials at the start (if model offloading is enabled)
     if not args.no_offload:
