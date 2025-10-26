@@ -90,18 +90,82 @@ def log_step(step: int, total: int, message: str):
     print(f"{'='*70}\n")
 
 
+def check_running_models():
+    """Check if any models are currently loaded in Ollama"""
+    try:
+        result = subprocess.run(
+            ["ollama", "ps"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        # Parse output - if there are more than just header lines, models are running
+        lines = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
+        # First line is header, rest are running models
+        running_models = lines[1:] if len(lines) > 1 else []
+        return running_models
+    except Exception as e:
+        print(f"⚠️  Error checking running models: {e}")
+        return []
+
+
+def ensure_no_models_running():
+    """Ensure no models are currently running before starting benchmark"""
+    print("\n🔍 Checking for running models...")
+    running = check_running_models()
+
+    if running:
+        print(f"⚠️  Found {len(running)} model(s) currently loaded:")
+        for model in running:
+            print(f"    - {model}")
+        print("\n🔄 Unloading all models to ensure clean benchmark...")
+
+        # Unload all models
+        try:
+            # First try graceful unload - ollama will unload after 5 min idle, we force it
+            subprocess.run(["sudo", "pkill", "-f", "ollama serve"], timeout=10)
+            time.sleep(2)
+            subprocess.Popen(
+                ["ollama", "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            time.sleep(3)
+
+            # Verify models are gone
+            still_running = check_running_models()
+            if still_running:
+                print(f"⚠️  Warning: {len(still_running)} model(s) still loaded after unload attempt")
+                return False
+            else:
+                print("✓ All models successfully unloaded")
+                return True
+        except Exception as e:
+            print(f"✗ Error unloading models: {e}")
+            return False
+    else:
+        print("✓ No models currently loaded - ready for clean benchmark")
+        return True
+
+
 def nanosec_to_sec(nanosec):
     """Convert nanoseconds to seconds"""
     return nanosec / 1000000000
 
 
 def offload_model():
-    """Offload all models from Ollama memory"""
+    """Offload all models from Ollama memory with verification"""
     log_step(0, 0, "Offloading models from memory")
+
+    # Check if models are running before offload
+    running_before = check_running_models()
+    if running_before:
+        print(f"  Found {len(running_before)} model(s) to offload")
+
     try:
         # Stop ollama to unload all models
         result = subprocess.run(
-            ["pkill", "-f", "ollama serve"],
+            ["sudo", "pkill", "-f", "ollama serve"],
             capture_output=True,
             text=True,
             timeout=30
@@ -115,16 +179,23 @@ def offload_model():
             stderr=subprocess.DEVNULL
         )
         time.sleep(3)  # Wait for service to start
-        print("✓ Models offloaded successfully")
-        return True
+
+        # Verify models are unloaded
+        running_after = check_running_models()
+        if running_after:
+            print(f"⚠️  Warning: {len(running_after)} model(s) still loaded after offload")
+            return False
+        else:
+            print("✓ Models offloaded successfully - memory cleared")
+            return True
+
     except subprocess.TimeoutExpired:
         print("⚠️  Timeout while offloading models")
         return False
     except Exception as e:
         print(f"⚠️  Error offloading models: {e}")
-        # Try alternative method
+        # Try alternative method - just verify ollama is responsive
         try:
-            # Use ollama ps to check running models, then unload
             subprocess.run(["ollama", "ps"], capture_output=True, text=True, timeout=10)
             print("✓ Ollama service is responsive")
             return True
@@ -479,6 +550,11 @@ def main():
         action="store_true",
         help="Skip model offloading between benchmarks (faster but may affect results)"
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Skip all interactive prompts (continue even if models can't be unloaded)"
+    )
 
     args = parser.parse_args()
 
@@ -515,6 +591,22 @@ def main():
         return 1
 
     print(f"\nModels to benchmark: {model_names}")
+
+    # Ensure no models are running before starting benchmark
+    if not ensure_no_models_running():
+        print("\n⚠️  Warning: Could not verify all models are unloaded")
+        print("    Benchmark results may not reflect max capacity")
+        if not args.force:
+            try:
+                response = input("\n    Continue anyway? (y/N): ")
+                if response.lower() != 'y':
+                    print("\n✗ Benchmark cancelled")
+                    return 1
+            except (EOFError, KeyboardInterrupt):
+                print("\n✗ Benchmark cancelled")
+                return 1
+        else:
+            print("    --force flag set: Continuing anyway...")
 
     total_steps = len(model_names) * (2 if not args.no_offload else 1)
     current_step = 0
