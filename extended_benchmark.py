@@ -90,6 +90,56 @@ def log_step(step: int, total: int, message: str):
     print(f"{'='*70}\n")
 
 
+def get_ollama_logs(lines: int = 50):
+    """Get recent Ollama logs from journalctl or stderr"""
+    try:
+        # Try journalctl first (systemd)
+        result = subprocess.run(
+            ["journalctl", "-u", "ollama", "-n", str(lines), "--no-pager"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0 and result.stdout:
+            return result.stdout
+    except:
+        pass
+
+    # Try getting logs from ollama process
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "ollama serve"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.stdout:
+            pid = result.stdout.strip().split('\n')[0]
+            # Try to get stderr/stdout from process
+            log_result = subprocess.run(
+                ["sudo", "tail", "-n", str(lines), f"/proc/{pid}/fd/2"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if log_result.stdout:
+                return log_result.stdout
+    except:
+        pass
+
+    return "Unable to retrieve Ollama logs"
+
+
+def check_if_model_generating(model_name: str) -> bool:
+    """Check if a model is currently generating output"""
+    running = check_running_models()
+    for line in running:
+        if model_name in line:
+            # Model is still loaded, likely generating
+            return True
+    return False
+
+
 def check_running_models():
     """Check if any models are currently loaded in Ollama"""
     try:
@@ -235,10 +285,16 @@ def test_model_load(model_name: str, timeout_seconds: int = 60) -> bool:
     except TimeoutError:
         signal.alarm(0)
         print(f"  ✗ Model load timeout ({timeout_seconds}s)")
+        print(f"  ℹ️  Fetching Ollama logs for diagnostics...")
+        logs = get_ollama_logs(20)
+        print(f"\n  Recent Ollama logs:\n{logs}\n")
         return False
     except Exception as e:
         signal.alarm(0)
         print(f"  ✗ Model load error: {e}")
+        print(f"  ℹ️  Fetching Ollama logs for diagnostics...")
+        logs = get_ollama_logs(20)
+        print(f"\n  Recent Ollama logs:\n{logs}\n")
         return False
 
 
@@ -338,7 +394,30 @@ def run_single_benchmark(
 
     except TimeoutError:
         signal.alarm(0)
-        print(f"\n    ✗ Benchmark timeout ({timeout_seconds}s)")
+        print(f"\n    ⏱️  Benchmark timeout ({timeout_seconds}s)")
+
+        # Check if model is still generating
+        if check_if_model_generating(model_name):
+            print(f"    ℹ️  Model is still loaded and may be generating...")
+            print(f"    ⏳ Waiting additional 60s for completion...")
+
+            # Give it 60 more seconds
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(60)
+
+            try:
+                # Try to wait for completion
+                time.sleep(60)
+                signal.alarm(0)
+                print(f"    ℹ️  Extended wait completed, but no response captured")
+            except TimeoutError:
+                signal.alarm(0)
+                print(f"    ✗ Extended timeout - giving up")
+
+        print(f"    ℹ️  Fetching Ollama logs for diagnostics...")
+        logs = get_ollama_logs(20)
+        print(f"\n    Recent Ollama logs:\n{logs}\n")
+
         return BenchmarkResult(
             model=model_name,
             prompt=prompt,
@@ -346,7 +425,7 @@ def run_single_benchmark(
             prompt_tokens=0, response_tokens=0,
             load_time=0, prompt_eval_time=0, response_time=0, total_time=0,
             success=False,
-            error=f"Timeout after {timeout_seconds}s"
+            error=f"Timeout after {timeout_seconds}s (model may still be generating)"
         )
     except Exception as e:
         signal.alarm(0)
@@ -531,8 +610,8 @@ def main():
     parser.add_argument(
         "--timeout",
         type=int,
-        default=300,
-        help="Timeout in seconds for each benchmark run (default: 300)"
+        default=600,
+        help="Timeout in seconds for each benchmark run (default: 600)"
     )
     parser.add_argument(
         "--output",
