@@ -11,6 +11,9 @@ import sys
 import time
 import os
 import atexit
+import platform
+import json
+import csv
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict
@@ -141,6 +144,117 @@ class ModelBenchmarkSummary(BaseModel):
     avg_prompt_eval_time: float
     avg_response_time: float
     avg_total_time: float
+
+
+class SystemInfo(BaseModel):
+    """System hardware and software information"""
+    hostname: str
+    os: str
+    os_version: str
+    python_version: str
+    ollama_version: str
+    cpu_model: str
+    cpu_cores: int
+    ram_total_gb: float
+    gpu_available: bool
+    gpu_model: Optional[str] = None
+    gpu_vram_gb: Optional[float] = None
+    gpu_driver: Optional[str] = None
+    gpu_cuda_version: Optional[str] = None
+
+
+def collect_system_info() -> SystemInfo:
+    """Collect comprehensive system information"""
+
+    # Basic system info
+    hostname = platform.node()
+    os_name = f"{platform.system()} {platform.release()}"
+    os_version = platform.version()
+    python_version = platform.python_version()
+
+    # Ollama version
+    ollama_version = "Unknown"
+    try:
+        result = subprocess.run(["ollama", "--version"], capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            ollama_version = result.stdout.strip().replace("ollama version is ", "").replace("ollama version ", "")
+    except:
+        pass
+
+    # CPU info
+    cpu_model = "Unknown"
+    cpu_cores = os.cpu_count() or 0
+    try:
+        with open("/proc/cpuinfo", "r") as f:
+            for line in f:
+                if "model name" in line:
+                    cpu_model = line.split(":")[1].strip()
+                    break
+    except:
+        cpu_model = platform.processor() or "Unknown"
+
+    # RAM info
+    ram_total_gb = 0.0
+    try:
+        with open("/proc/meminfo", "r") as f:
+            for line in f:
+                if "MemTotal" in line:
+                    ram_kb = int(line.split()[1])
+                    ram_total_gb = ram_kb / (1024 * 1024)
+                    break
+    except:
+        pass
+
+    # GPU info
+    gpu_available = False
+    gpu_model = None
+    gpu_vram_gb = None
+    gpu_driver = None
+    gpu_cuda_version = None
+
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,memory.total,driver_version", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            gpu_available = True
+            parts = result.stdout.strip().split(',')
+            if len(parts) >= 3:
+                gpu_model = parts[0].strip()
+                vram_str = parts[1].strip().split()[0]  # "45000 MiB" -> "45000"
+                gpu_vram_gb = float(vram_str) / 1024
+                gpu_driver = parts[2].strip()
+
+            # Get CUDA version
+            cuda_result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=cuda_version", "--format=csv,noheader"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if cuda_result.returncode == 0:
+                gpu_cuda_version = cuda_result.stdout.strip()
+    except:
+        pass
+
+    return SystemInfo(
+        hostname=hostname,
+        os=os_name,
+        os_version=os_version,
+        python_version=python_version,
+        ollama_version=ollama_version,
+        cpu_model=cpu_model,
+        cpu_cores=cpu_cores,
+        ram_total_gb=round(ram_total_gb, 1),
+        gpu_available=gpu_available,
+        gpu_model=gpu_model,
+        gpu_vram_gb=round(gpu_vram_gb, 1) if gpu_vram_gb else None,
+        gpu_driver=gpu_driver,
+        gpu_cuda_version=gpu_cuda_version
+    )
 
 
 def log_step(step: int, total: int, message: str):
@@ -557,12 +671,37 @@ def benchmark_model(
     return summary
 
 
-def save_results_to_markdown(summaries: List[ModelBenchmarkSummary], output_file: str):
+def save_results_to_markdown(summaries: List[ModelBenchmarkSummary], output_file: str, system_info: Optional[SystemInfo] = None):
     """Save benchmark results to a markdown file"""
 
     with open(output_file, 'w') as f:
         f.write("# LLM Benchmark Results\n\n")
         f.write(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+
+        # System information
+        if system_info:
+            f.write("## System Information\n\n")
+            f.write(f"- **Hostname:** {system_info.hostname}\n")
+            f.write(f"- **OS:** {system_info.os}\n")
+            f.write(f"- **Python:** {system_info.python_version}\n")
+            f.write(f"- **Ollama:** {system_info.ollama_version}\n")
+            f.write(f"- **CPU:** {system_info.cpu_model} ({system_info.cpu_cores} cores)\n")
+            f.write(f"- **RAM:** {system_info.ram_total_gb:.1f} GB\n")
+
+            if system_info.gpu_available and system_info.gpu_model:
+                f.write(f"- **GPU:** {system_info.gpu_model}")
+                if system_info.gpu_vram_gb:
+                    f.write(f" ({system_info.gpu_vram_gb:.1f} GB VRAM)")
+                f.write("\n")
+                if system_info.gpu_driver:
+                    f.write(f"- **GPU Driver:** {system_info.gpu_driver}\n")
+                if system_info.gpu_cuda_version:
+                    f.write(f"- **CUDA:** {system_info.gpu_cuda_version}\n")
+            else:
+                f.write(f"- **GPU:** Not available (CPU only)\n")
+
+            f.write("\n")
+
         f.write("---\n\n")
 
         # Summary table
@@ -609,6 +748,114 @@ def save_results_to_markdown(summaries: List[ModelBenchmarkSummary], output_file
             f.write("\n")
 
     print(f"\n✓ Results saved to: {output_file}")
+
+
+def save_results_to_json(summaries: List[ModelBenchmarkSummary], output_file: str, system_info: Optional[SystemInfo] = None):
+    """Save benchmark results to JSON file"""
+
+    data = {
+        "generated": datetime.now().isoformat(),
+        "system_info": system_info.model_dump() if system_info else None,
+        "models": []
+    }
+
+    for summary in summaries:
+        model_data = {
+            "model": summary.model,
+            "averages": {
+                "prompt_eval_ts": round(summary.avg_prompt_eval_ts, 2),
+                "response_ts": round(summary.avg_response_ts, 2),
+                "total_ts": round(summary.avg_total_ts, 2),
+                "prompt_tokens": round(summary.avg_prompt_tokens, 0),
+                "response_tokens": round(summary.avg_response_tokens, 0),
+                "load_time": round(summary.avg_load_time, 2),
+                "prompt_eval_time": round(summary.avg_prompt_eval_time, 2),
+                "response_time": round(summary.avg_response_time, 2),
+                "total_time": round(summary.avg_total_time, 2)
+            },
+            "runs": []
+        }
+
+        for run in summary.runs:
+            run_data = {
+                "prompt": run.prompt,
+                "success": run.success,
+                "prompt_eval_ts": round(run.prompt_eval_ts, 2),
+                "response_ts": round(run.response_ts, 2),
+                "total_ts": round(run.total_ts, 2),
+                "prompt_tokens": run.prompt_tokens,
+                "response_tokens": run.response_tokens,
+                "load_time": round(run.load_time, 2),
+                "prompt_eval_time": round(run.prompt_eval_time, 2),
+                "response_time": round(run.response_time, 2),
+                "total_time": round(run.total_time, 2),
+                "error": run.error
+            }
+            model_data["runs"].append(run_data)
+
+        data["models"].append(model_data)
+
+    with open(output_file, 'w') as f:
+        json.dump(data, f, indent=2)
+
+    print(f"✓ JSON results saved to: {output_file}")
+
+
+def save_results_to_csv(summaries: List[ModelBenchmarkSummary], output_file: str, system_info: Optional[SystemInfo] = None):
+    """Save benchmark results to CSV file"""
+
+    with open(output_file, 'w', newline='') as f:
+        writer = csv.writer(f)
+
+        # Header with system info
+        if system_info:
+            writer.writerow(["System Info"])
+            writer.writerow(["Hostname", system_info.hostname])
+            writer.writerow(["OS", system_info.os])
+            writer.writerow(["CPU", f"{system_info.cpu_model} ({system_info.cpu_cores} cores)"])
+            writer.writerow(["RAM", f"{system_info.ram_total_gb:.1f} GB"])
+            if system_info.gpu_available and system_info.gpu_model:
+                writer.writerow(["GPU", f"{system_info.gpu_model} ({system_info.gpu_vram_gb:.1f} GB)"])
+            writer.writerow([])
+
+        # Results header
+        writer.writerow(["Benchmark Results"])
+        writer.writerow(["Generated", datetime.now().strftime('%Y-%m-%d %H:%M:%S')])
+        writer.writerow([])
+
+        # Summary table
+        writer.writerow(["Model", "Prompt Eval (t/s)", "Response (t/s)", "Total (t/s)", "Avg Prompt Tokens", "Avg Response Tokens"])
+        for summary in summaries:
+            writer.writerow([
+                summary.model,
+                f"{summary.avg_prompt_eval_ts:.2f}",
+                f"{summary.avg_response_ts:.2f}",
+                f"{summary.avg_total_ts:.2f}",
+                f"{summary.avg_prompt_tokens:.0f}",
+                f"{summary.avg_response_tokens:.0f}"
+            ])
+
+        writer.writerow([])
+
+        # Detailed results for each model
+        for summary in summaries:
+            writer.writerow([f"=== {summary.model} ==="])
+            writer.writerow(["Run #", "Prompt", "Success", "Response (t/s)", "Response Tokens", "Total Time (s)", "Error"])
+
+            for idx, run in enumerate(summary.runs):
+                writer.writerow([
+                    idx + 1,
+                    run.prompt[:60] + "..." if len(run.prompt) > 60 else run.prompt,
+                    "Yes" if run.success else "No",
+                    f"{run.response_ts:.2f}" if run.success else "",
+                    run.response_tokens if run.success else "",
+                    f"{run.total_time:.2f}" if run.success else "",
+                    run.error or ""
+                ])
+
+            writer.writerow([])
+
+    print(f"✓ CSV results saved to: {output_file}")
 
 
 def get_all_models() -> List[str]:
@@ -695,6 +942,16 @@ def main():
         action="store_true",
         help="Skip all interactive prompts (continue even if models can't be unloaded)"
     )
+    parser.add_argument(
+        "--export-json",
+        type=str,
+        help="Export results to JSON file (e.g., --export-json results.json)"
+    )
+    parser.add_argument(
+        "--export-csv",
+        type=str,
+        help="Export results to CSV file (e.g., --export-csv results.csv)"
+    )
 
     args = parser.parse_args()
 
@@ -747,6 +1004,16 @@ def main():
     print(f"  Timeout: {args.timeout}s")
     print(f"  Output: {args.output}")
     print(f"  Model offloading: {'Disabled' if args.no_offload else 'Enabled'}")
+
+    # Collect system information
+    print("\n📊 Collecting system information...")
+    system_info = collect_system_info()
+    print(f"  CPU: {system_info.cpu_model} ({system_info.cpu_cores} cores)")
+    print(f"  RAM: {system_info.ram_total_gb:.1f} GB")
+    if system_info.gpu_available and system_info.gpu_model:
+        print(f"  GPU: {system_info.gpu_model} ({system_info.gpu_vram_gb:.1f} GB VRAM)")
+    else:
+        print(f"  GPU: Not available")
 
     # Get models
     if args.models:
@@ -825,13 +1092,26 @@ def main():
     # Save results
     print("\n" + "="*70)
     log_step(0, 0, "Saving results")
-    save_results_to_markdown(all_summaries, args.output)
+    save_results_to_markdown(all_summaries, args.output, system_info)
+
+    # Export to JSON if requested
+    if args.export_json:
+        save_results_to_json(all_summaries, args.export_json, system_info)
+
+    # Export to CSV if requested
+    if args.export_csv:
+        save_results_to_csv(all_summaries, args.export_csv, system_info)
 
     print("\n" + "="*70)
     print("BENCHMARK COMPLETE")
     print("="*70)
     print(f"\nBenchmarked {len(all_summaries)} models")
-    print(f"Results saved to: {args.output}\n")
+    print(f"Results saved to: {args.output}")
+    if args.export_json:
+        print(f"JSON export: {args.export_json}")
+    if args.export_csv:
+        print(f"CSV export: {args.export_csv}")
+    print()
 
     return 0
 

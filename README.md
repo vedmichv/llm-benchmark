@@ -6,12 +6,17 @@ Comprehensive benchmarking tool for Large Language Models (LLMs) running locally
 
 - **Automated Performance Testing**: Benchmark multiple models with configurable prompts
 - **Comprehensive Metrics**: Token throughput, response times, load times, and more
+- **System Information Collection**: Auto-captures GPU, CPU, RAM, OS details in results
+- **Multiple Export Formats**: Markdown, JSON, and CSV outputs for analysis
+- **Results Comparison Tool**: Compare benchmarks across runs to track improvements
 - **Diverse Test Suite**: 7 prompts testing technical knowledge, logic, system design, ethics, and problem-solving
 - **Model Management**: Automatic model offloading between tests for fair comparisons
+- **Concurrent Run Protection**: Lock files prevent simultaneous benchmarks
 - **Progress Tracking**: Real-time progress indicators and streaming responses
 - **Timestamped Results**: All results saved with timestamps to prevent overwriting
 - **Markdown Reports**: Beautiful, detailed results in markdown format
-- **Timeout Protection**: Configurable timeouts for underpowered systems
+- **Timeout Protection**: 10-minute default timeout with smart handling
+- **Ollama Log Diagnostics**: Automatic log capture on failures
 
 ## 📊 What Gets Tested
 
@@ -190,6 +195,45 @@ python3 extended_benchmark.py \
   --runs-per-prompt 2
 ```
 
+### Export to JSON/CSV
+
+```bash
+# Export to JSON for data analysis
+python3 extended_benchmark.py --export-json results.json
+
+# Export to CSV for Excel/spreadsheets
+python3 extended_benchmark.py --export-csv results.csv
+
+# Export to all formats
+python3 extended_benchmark.py \
+  --export-json results.json \
+  --export-csv results.csv
+```
+
+**Exports include:**
+- System information (GPU, CPU, RAM, OS)
+- All performance metrics
+- Individual run details
+- Timestamps
+
+### Compare Results
+
+Compare benchmark results from different runs to track improvements:
+
+```bash
+# Compare two benchmark runs
+python3 compare_results.py \
+  benchmark_results_20251026_140000.json \
+  benchmark_results_20251026_160000.json \
+  --labels "Before" "After"
+```
+
+**Comparison shows:**
+- Performance differences (absolute & percentage)
+- System configuration changes
+- Per-model improvements
+- Summary statistics
+
 ### Advanced Options
 
 ```bash
@@ -206,10 +250,13 @@ python3 extended_benchmark.py \
 - `--skip-models`: Models to exclude (space-separated)
 - `--prompts`: Custom prompts (space-separated, use quotes)
 - `--runs-per-prompt`: Number of times to run each prompt (default: 2)
-- `--timeout`: Timeout per run in seconds (default: 300)
+- `--timeout`: Timeout per run in seconds (default: 600 / 10 min)
 - `--output`: Custom output filename (default: timestamped)
 - `--no-timestamp`: Disable timestamp in output filename
 - `--no-offload`: Skip model offloading (faster but less accurate)
+- `--force`: Skip all interactive prompts (for automation)
+- `--export-json`: Export results to JSON file
+- `--export-csv`: Export results to CSV file
 
 ---
 
@@ -220,11 +267,17 @@ python3 extended_benchmark.py \
 After running a benchmark, you'll get:
 
 1. **`benchmark_results_YYYYMMDD_HHMMSS.md`** - Main results file
+   - System information (GPU, CPU, RAM, OS)
    - Summary table comparing all models
    - Detailed per-model statistics
    - Individual run breakdowns
 
-2. **Log file (if using `tee`)** - Complete execution log
+2. **JSON/CSV exports** (optional)
+   - Machine-readable formats for analysis
+   - Complete data with system info
+   - Easy import into Excel, Python, R
+
+3. **Log file (if using `tee`)** - Complete execution log
    - Real-time progress
    - Model responses (truncated)
    - Timing information
