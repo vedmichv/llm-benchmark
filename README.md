@@ -49,6 +49,31 @@ The launcher will automatically:
 - Install dependencies
 - Run the benchmark
 
+### 🪟 Windows/WSL Users
+
+If you're running on Windows with WSL, see the **[Windows Setup Guide](WINDOWS_SETUP.md)** for:
+- Complete step-by-step setup instructions
+- Ollama configuration for WSL access
+- Firewall and networking setup
+- Troubleshooting common issues
+- Performance expectations
+
+**Quick Windows Setup:**
+```bash
+# 1. Configure Ollama on Windows (PowerShell Admin):
+[System.Environment]::SetEnvironmentVariable('OLLAMA_HOST', '0.0.0.0:11434', 'User')
+New-NetFirewallRule -DisplayName "Ollama WSL Access" -Direction Inbound -LocalPort 11434 -Protocol TCP -Action Allow
+
+# 2. In WSL, set environment variable:
+export OLLAMA_HOST="http://$(ip route show | grep -i default | awk '{ print $3}'):11434"
+
+# 3. Run the benchmark:
+cd /tmp/llm-benchmark
+python3 run.py
+```
+
+See [WINDOWS_SETUP.md](WINDOWS_SETUP.md) for complete details.
+
 **Platform-specific commands:**
 - **Linux/macOS**: `./run.sh` or `python3 run.py`
 - **Windows (CMD)**: `run.bat` or `python run.py`
