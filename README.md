@@ -30,12 +30,35 @@ The benchmark includes 5 optimized prompts that test:
 | 🏗️ System Design | URL Shortener Architecture | Architecture skills, scalability thinking |
 | 💻 Analytical Thinking | Language Performance Analysis | Technical depth, comparative analysis |
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Single Command)
+
+**NEW: Cross-platform launcher** - Works on Windows, Linux, and macOS!
+
+```bash
+# Clone the repository
+git clone https://github.com/vedmichv/llm-benchmark.git
+cd llm-benchmark
+
+# Run with single command (auto-installs dependencies)
+python run.py
+```
+
+The launcher will automatically:
+- Check Python and Ollama installation
+- Create virtual environment
+- Install dependencies
+- Run the benchmark
+
+**Platform-specific commands:**
+- **Linux/macOS**: `./run.sh` or `python3 run.py`
+- **Windows (CMD)**: `run.bat` or `python run.py`
+- **Windows (PowerShell)**: `.\run.ps1` or `python run.py`
 
 ### Prerequisites
 
-- **Operating System**: Ubuntu 20.04+ (or other Linux distributions)
+- **Operating System**: Windows 10+, Linux (Ubuntu 20.04+), or macOS 11+
 - **Python**: 3.8 or higher
+- **Ollama**: Install from [ollama.com](https://ollama.com/)
 - **RAM**: 8GB minimum (16GB+ recommended for larger models)
 - **GPU**: Optional but highly recommended (NVIDIA GPU with CUDA support)
 
@@ -45,26 +68,32 @@ The benchmark includes 5 optimized prompts that test:
 
 ### Step 1: Install Ollama
 
-Ollama is required to run LLMs locally. Install it on Ubuntu:
+Ollama is required to run LLMs locally.
 
+**Linux:**
 ```bash
-# Download and install Ollama
 curl -fsSL https://ollama.com/install.sh | sh
+# Start service
+sudo systemctl start ollama
+sudo systemctl enable ollama  # Start on boot
 ```
+
+**macOS:**
+```bash
+# Download from https://ollama.com/download
+# Or use Homebrew:
+brew install ollama
+ollama serve  # Run in terminal
+```
+
+**Windows:**
+- Download installer from [ollama.com/download](https://ollama.com/download)
+- Run the installer
+- Ollama will start automatically
 
 **Verify installation:**
 ```bash
 ollama --version
-```
-
-**Start Ollama service:**
-```bash
-# Start in background
-ollama serve &
-
-# Or use systemd (recommended for persistent service)
-sudo systemctl start ollama
-sudo systemctl enable ollama  # Start on boot
 ```
 
 ### Step 2: Download Models
@@ -98,22 +127,51 @@ gpt-oss:20b                       17052f91a42e    13 GB     X minutes ago
 qwen3-coder:30b                   06c1097efce0    18 GB     X minutes ago
 ```
 
-### Step 3: Clone and Setup This Repository
+### Step 3: Clone and Run
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/vedmichv/llm-benchmark.git
 cd llm-benchmark
 
-# Install Python dependencies
-pip3 install --break-system-packages -r requirements.txt
-# Or use a virtual environment (recommended):
-python3 -m venv venv
-source venv/bin/activate
+# Run with the cross-platform launcher (automatically installs dependencies)
+python run.py
+```
+
+The launcher (`run.py`) automatically handles:
+- Virtual environment creation
+- Dependency installation
+- Platform detection
+
+**Manual installation (if needed):**
+```bash
+# Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+# or
+.venv\Scripts\activate  # Windows
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### Step 4: (Optional) Setup Passwordless Sudo
+### Step 4: Verify Setup
+
+Test that everything is working:
+
+```bash
+# Using the launcher (recommended)
+python run.py --models "deepseek-r1:8b" --runs-per-prompt 1 --prompts "Hello, how are you?"
+
+# Or run directly
+python3 extended_benchmark.py --models "deepseek-r1:8b" --runs-per-prompt 1 --prompts "Hello, how are you?"
+```
+
+If you see output with benchmark results, you're ready to go! 🎉
+
+---
+
+### (Optional) Setup Passwordless Sudo
 
 The benchmark needs sudo to offload models between tests. You have two options:
 
@@ -134,22 +192,8 @@ The benchmark needs sudo to offload models between tests. You have two options:
 **Option C: Skip offloading** (Fast but less accurate)
 ```bash
 # Run without model offloading (no sudo needed)
-python3 extended_benchmark.py --no-offload
+python run.py --no-offload
 ```
-
-### Step 5: Verify Setup
-
-Test that everything is working:
-
-```bash
-# Quick test with smallest model
-python3 extended_benchmark.py \
-  --models "deepseek-r1:8b" \
-  --runs-per-prompt 1 \
-  --prompts "Hello, how are you?"
-```
-
-If you see output with benchmark results, you're ready to go! 🎉
 
 ---
 
@@ -158,6 +202,10 @@ If you see output with benchmark results, you're ready to go! 🎉
 ### Basic Benchmark (All Models, All Prompts)
 
 ```bash
+# Using the launcher (recommended - handles environment automatically)
+python run.py
+
+# Or run directly
 python3 extended_benchmark.py
 ```
 
@@ -171,7 +219,7 @@ This runs the full benchmark suite:
 ### Quick Test (Single Model)
 
 ```bash
-python3 extended_benchmark.py --models "qwen3-coder:30b" --runs-per-prompt 1
+python run.py --models "qwen3-coder:30b" --runs-per-prompt 1
 ```
 
 **Result**: Tests fastest model with 5 prompts (1 run each) in ~5-8 minutes
@@ -180,16 +228,16 @@ python3 extended_benchmark.py --models "qwen3-coder:30b" --runs-per-prompt 1
 
 ```bash
 # Test only fast models
-python3 extended_benchmark.py --models "qwen3-coder:30b" "gpt-oss:20b"
+python run.py --models "qwen3-coder:30b" "gpt-oss:20b"
 
 # Skip slow models
-python3 extended_benchmark.py --skip-models "deepseek-r1:8b-0528-qwen3-q8_0"
+python run.py --skip-models "deepseek-r1:8b-0528-qwen3-q8_0"
 ```
 
 ### Custom Prompts
 
 ```bash
-python3 extended_benchmark.py \
+python run.py \
   --prompts "Explain Docker containers" "What is Kubernetes?" \
   --runs-per-prompt 2
 ```
