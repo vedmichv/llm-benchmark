@@ -259,9 +259,30 @@ python run.py --models "qwen3-coder:30b" "gpt-oss:20b"
 python run.py --skip-models "deepseek-r1:8b-0528-qwen3-q8_0"
 ```
 
+### Prompt Sets (Small, Medium, Large)
+
+Choose from predefined prompt packages:
+
+```bash
+# Small set - Quick test (3 prompts, ~5-10 minutes)
+python run.py --prompt-set small
+
+# Medium set - Standard test (5 prompts, ~15-20 minutes) [DEFAULT]
+python run.py --prompt-set medium
+
+# Large set - Comprehensive test (11 prompts, ~40-60 minutes)
+python run.py --prompt-set large
+```
+
+**Prompt Set Details:**
+- **Small** (3 prompts): Quick tests for basic functionality and speed
+- **Medium** (5 prompts): Standard tests covering technical knowledge, logic, system design
+- **Large** (11 prompts): Comprehensive tests including distributed systems, caching, search engines, and more
+
 ### Custom Prompts
 
 ```bash
+# Override prompt sets with your own prompts
 python run.py \
   --prompts "Explain Docker containers" "What is Kubernetes?" \
   --runs-per-prompt 2
@@ -320,7 +341,8 @@ python3 extended_benchmark.py \
 **Options:**
 - `--models`: Specific models to test (space-separated)
 - `--skip-models`: Models to exclude (space-separated)
-- `--prompts`: Custom prompts (space-separated, use quotes)
+- `--prompt-set`: Choose prompt package: small (3), medium (5), large (11) [default: medium]
+- `--prompts`: Custom prompts (space-separated, use quotes) - overrides --prompt-set
 - `--runs-per-prompt`: Number of times to run each prompt (default: 2)
 - `--timeout`: Timeout per run in seconds (default: 600 / 10 min)
 - `--output`: Custom output filename (default: timestamped)
