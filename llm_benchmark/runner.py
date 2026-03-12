@@ -349,6 +349,7 @@ def benchmark_model(
     """
     console = get_console()
     all_results: list[BenchmarkResult] = []
+    _cache_explanation_shown = False
 
     # Warmup: pre-load model to exclude load time from measurements
     if not skip_warmup:
@@ -384,12 +385,27 @@ def benchmark_model(
                     if result.response.eval_duration > 0
                     else 0
                 )
+                cached_tag = " [dim]\\[cached][/dim]" if result.prompt_cached else ""
                 console.print(
                     f"    [green]{result.response.eval_count} tokens "
-                    f"@ {response_ts:.1f} t/s[/green]"
+                    f"@ {response_ts:.1f} t/s[/green]{cached_tag}"
                 )
+                if result.prompt_cached and not _cache_explanation_shown:
+                    console.print(
+                        "    [dim italic]Prompt caching: Ollama reused the prompt "
+                        "from memory, so prompt eval time is 0.[/dim italic]"
+                    )
+                    _cache_explanation_shown = True
             elif not result.success:
                 console.print(f"    [red]Failed: {result.error}[/red]")
+
+    # Warn if all successful results are cached
+    successful = [r for r in all_results if r.success]
+    if successful and all(r.prompt_cached for r in successful):
+        console.print(
+            "  [yellow]All runs cached -- prompt eval metrics "
+            "unavailable for this model[/yellow]"
+        )
 
     avgs = compute_averages(all_results)
 

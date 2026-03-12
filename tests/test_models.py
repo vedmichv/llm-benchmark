@@ -75,7 +75,8 @@ def test_message_model():
 
 def test_compute_averages_correct(sample_ollama_response_dict):
     """compute_averages uses total_tokens/total_time (STAB-04)."""
-    from llm_benchmark.models import BenchmarkResult, OllamaResponse, compute_averages
+    from llm_benchmark.models import BenchmarkResult, OllamaResponse
+    from llm_benchmark.runner import compute_averages
 
     # Create two results with known values
     resp1 = OllamaResponse.model_validate(sample_ollama_response_dict)
@@ -102,7 +103,7 @@ def test_compute_averages_correct(sample_ollama_response_dict):
 
 def test_compute_averages_empty():
     """compute_averages returns empty dict for no successful results."""
-    from llm_benchmark.models import compute_averages
+    from llm_benchmark.runner import compute_averages
 
     assert compute_averages([]) == {}
 
