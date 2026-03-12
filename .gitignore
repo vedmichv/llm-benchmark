@@ -168,5 +168,7 @@ test_*.md
 comprehensive_*.md
 *.csv
 *.json
+!.planning/**/*.json
+!.planning/**/*.md
 results/
 logs/
