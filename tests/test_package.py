@@ -14,7 +14,6 @@ def test_structure():
     """Verify all expected submodules are importable (QUAL-02)."""
     import importlib
 
-    # models.py is created in Task 2; test config and prompts for now
-    for module_name in ["llm_benchmark.config", "llm_benchmark.prompts"]:
+    for module_name in ["llm_benchmark.config", "llm_benchmark.models", "llm_benchmark.prompts"]:
         mod = importlib.import_module(module_name)
         assert mod is not None, f"Failed to import {module_name}"
