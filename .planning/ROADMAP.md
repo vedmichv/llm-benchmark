@@ -29,11 +29,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. If the student's machine has insufficient RAM for a selected model, they see a warning before the benchmark starts
   4. There is one benchmark module (no confusion between benchmark.py and extended_benchmark.py)
   5. The project uses Python 3.10+ with Pydantic 2.x and has a proper package layout (llm_benchmark/)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md -- Package scaffold, pyproject.toml, data models, config, prompts
+- [ ] 01-02-PLAN.md -- Core benchmark runner, system info, exporters, compare
+- [ ] 01-03-PLAN.md -- CLI entry points, pre-flight checks, cleanup old files
 
 ### Phase 2: Measurement Reliability
 **Goal**: Benchmark numbers are trustworthy -- warmup excludes cold-start overhead, transient failures retry automatically, and metrics are mathematically correct
@@ -88,7 +89,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/0 | Not started | - |
+| 1. Foundation | 0/3 | Planning complete | - |
 | 2. Measurement Reliability | 0/0 | Not started | - |
 | 3. Advanced Benchmarking | 0/0 | Not started | - |
 | 4. Student Experience | 0/0 | Not started | - |
