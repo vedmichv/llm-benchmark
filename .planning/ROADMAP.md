@@ -45,11 +45,11 @@ Plans:
   2. If Ollama returns a transient error mid-benchmark, the tool retries automatically (up to configurable limit) instead of crashing
   3. When prompt caching is detected (prompt_eval_count = -1), the affected metrics are excluded from averages with a visible note
   4. All result files (JSON, CSV, Markdown) are saved into a results/ directory, not the project root
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md -- Warmup runs, tenacity retry logic, --skip-warmup and --max-retries CLI flags
+- [ ] 02-02-PLAN.md -- Cache visibility in terminal and exports, results/.gitignore, duplicate cleanup
 
 ### Phase 3: Advanced Benchmarking
 **Goal**: Students can stress-test models with concurrent requests and automatically find the best configuration for their hardware
@@ -90,6 +90,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete   | 2026-03-12 |
-| 2. Measurement Reliability | 0/0 | Not started | - |
+| 2. Measurement Reliability | 0/2 | Not started | - |
 | 3. Advanced Benchmarking | 0/0 | Not started | - |
 | 4. Student Experience | 0/0 | Not started | - |
