@@ -41,11 +41,11 @@
 
 ### Code Quality (QUAL)
 
-- [ ] **QUAL-01**: Single consolidated benchmark module (no benchmark.py vs extended_benchmark.py confusion)
-- [ ] **QUAL-02**: Python package structure (llm_benchmark/ with submodules)
+- [x] **QUAL-01**: Single consolidated benchmark module (no benchmark.py vs extended_benchmark.py confusion)
+- [x] **QUAL-02**: Python package structure (llm_benchmark/ with submodules)
 - [ ] **QUAL-03**: Unit tests with mocked Ollama for core functions (>60% coverage)
 - [ ] **QUAL-04**: GitHub Actions CI running lint (ruff) + compile check + unit tests
-- [ ] **QUAL-05**: Python >=3.10 requirement (Pydantic 2.x + tenacity compatibility)
+- [x] **QUAL-05**: Python >=3.10 requirement (Pydantic 2.x + tenacity compatibility)
 
 ## v2 Requirements
 
@@ -84,9 +84,9 @@
 | STAB-04 | Phase 1 | Pending |
 | STAB-05 | Phase 1 | Pending |
 | STAB-06 | Phase 1 | Pending |
-| QUAL-01 | Phase 1 | Pending |
-| QUAL-02 | Phase 1 | Pending |
-| QUAL-05 | Phase 1 | Pending |
+| QUAL-01 | Phase 1 | Complete |
+| QUAL-02 | Phase 1 | Complete |
+| QUAL-05 | Phase 1 | Complete |
 | BENCH-01 | Phase 2 | Pending |
 | BENCH-02 | Phase 2 | Pending |
 | BENCH-07 | Phase 2 | Pending |

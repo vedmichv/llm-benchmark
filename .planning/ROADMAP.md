@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Package scaffold, pyproject.toml, data models, config, prompts
+- [x] 01-01-PLAN.md -- Package scaffold, pyproject.toml, data models, config, prompts
 - [ ] 01-02-PLAN.md -- Core benchmark runner, system info, exporters, compare
 - [ ] 01-03-PLAN.md -- CLI entry points, pre-flight checks, cleanup old files
 
@@ -89,7 +89,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Planning complete | - |
+| 1. Foundation | 1/3 | Executing | - |
 | 2. Measurement Reliability | 0/0 | Not started | - |
 | 3. Advanced Benchmarking | 0/0 | Not started | - |
 | 4. Student Experience | 0/0 | Not started | - |
