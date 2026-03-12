@@ -22,7 +22,7 @@
 - [ ] **BENCH-04**: Concurrent mode reports aggregate throughput (total_tokens/wall_time) and per-request average
 - [ ] **BENCH-05**: User can run parameter sweep with --sweep (auto-explore num_ctx, num_gpu combinations)
 - [ ] **BENCH-06**: Sweep reports best configuration found with throughput numbers
-- [ ] **BENCH-07**: Prompt caching detection excludes affected metrics from averages (instead of silently corrupting)
+- [x] **BENCH-07**: Prompt caching detection excludes affected metrics from averages (instead of silently corrupting)
 
 ### Analysis (ANLZ)
 
@@ -35,7 +35,7 @@
 - [ ] **UX-01**: Running tool with no arguments shows interactive menu (quick test / standard / full / custom)
 - [ ] **UX-02**: Quick test mode runs ~30 seconds: smallest model, 1 prompt, confirms "everything works"
 - [ ] **UX-03**: End of benchmark shows ranked model comparison with visual bar chart in terminal
-- [ ] **UX-04**: All result files saved to results/ directory (not project root)
+- [x] **UX-04**: All result files saved to results/ directory (not project root)
 - [ ] **UX-05**: Results include system info, model rankings, and recommendations for optimal config
 - [ ] **UX-06**: Shareable report format (Markdown with system info + rankings + individual runs)
 
@@ -89,8 +89,8 @@
 | QUAL-05 | Phase 1 | Complete |
 | BENCH-01 | Phase 2 | Complete |
 | BENCH-02 | Phase 2 | Complete |
-| BENCH-07 | Phase 2 | Pending |
-| UX-04 | Phase 2 | Pending |
+| BENCH-07 | Phase 2 | Complete |
+| UX-04 | Phase 2 | Complete |
 | BENCH-03 | Phase 3 | Pending |
 | BENCH-04 | Phase 3 | Pending |
 | BENCH-05 | Phase 3 | Pending |

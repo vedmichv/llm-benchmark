@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-stopped_at: Plan 02-01 complete
-last_updated: "2026-03-12T20:40:14.000Z"
-last_activity: 2026-03-12 -- Plan 02-01 executed (warmup & retry)
+stopped_at: Plan 02-02 complete -- Phase 2 done
+last_updated: "2026-03-12T20:48:00.000Z"
+last_activity: 2026-03-12 -- Plan 02-02 executed (cache visibility)
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 4
-  percent: 40
+  completed_plans: 5
+  percent: 50
 ---
 
 # Project State
@@ -21,33 +21,33 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Student clones repo, runs one command, gets clear answer about their hardware's LLM capabilities.
-**Current focus:** Phase 2: Measurement Reliability
+**Current focus:** Phase 3: Concurrent Benchmarking
 
 ## Current Position
 
-Phase: 2 of 4 (Measurement Reliability)
-Plan: 1 of 2 in current phase
-Status: In Progress
-Last activity: 2026-03-12 -- Plan 02-01 executed (warmup & retry)
+Phase: 2 of 4 (Measurement Reliability) -- COMPLETE
+Plan: 2 of 2 in current phase
+Status: Phase 2 Complete
+Last activity: 2026-03-12 -- Plan 02-02 executed (cache visibility)
 
-Progress: [████░░░░░░] 40%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 6min
-- Total execution time: 0.4 hours
+- Total plans completed: 5
+- Average duration: 5min
+- Total execution time: 0.5 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1-Foundation | 3/3 | 17min | 6min |
-| 2-Measurement-Reliability | 1/2 | 5min | 5min |
+| 2-Measurement-Reliability | 2/2 | 10min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4min), 01-02 (8min), 01-03 (5min), 02-01 (5min)
+- Last 5 plans: 01-01 (4min), 01-02 (8min), 01-03 (5min), 02-01 (5min), 02-02 (5min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -73,6 +73,9 @@ Recent decisions affecting current work:
 - [02-01]: Import ollama RequestError/ResponseError at module level to avoid mock interference
 - [02-01]: Dynamic tenacity retryer (not decorator) for runtime-configurable max_retries
 - [02-01]: Retry wraps outside timeout so each attempt gets full budget
+- [02-02]: Rich markup escape (\\[cached]) renders literal brackets in terminal
+- [02-02]: Auto-create .gitignore only for dirs named "results"
+- [02-02]: Removed duplicate compute_averages from models.py (runner.py is canonical)
 
 ### Pending Todos
 
@@ -84,6 +87,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T20:40:14.000Z
-Stopped at: Plan 02-01 complete
-Resume file: .planning/phases/02-measurement-reliability/02-01-SUMMARY.md
+Last session: 2026-03-12T20:48:00.000Z
+Stopped at: Plan 02-02 complete -- Phase 2 done
+Resume file: .planning/phases/02-measurement-reliability/02-02-SUMMARY.md
