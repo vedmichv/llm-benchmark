@@ -10,6 +10,8 @@ DEFAULT_TIMEOUT: int = 300  # seconds
 DEFAULT_PROMPT_SET: str = "medium"
 DEFAULT_RUNS_PER_PROMPT: int = 2
 RAM_SAFETY_MULTIPLIER: float = 1.2
+DEFAULT_MAX_RETRIES: int = 3
+DEFAULT_WARMUP_PROMPT: str = "Hello"
 
 
 def get_console() -> Console:

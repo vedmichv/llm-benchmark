@@ -14,8 +14,22 @@ import threading
 from typing import Any
 
 import ollama
+from ollama import RequestError as _RequestError, ResponseError as _ResponseError
 
-from llm_benchmark.config import DEFAULT_TIMEOUT, get_console
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception,
+    before_sleep_log,
+)
+
+from llm_benchmark.config import (
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_TIMEOUT,
+    DEFAULT_WARMUP_PROMPT,
+    get_console,
+)
 from llm_benchmark.models import (
     BenchmarkResult,
     ModelSummary,
@@ -67,6 +81,52 @@ def run_with_timeout(
     if error[0] is not None:
         raise error[0]
     return result[0]
+
+
+def warmup_model(model_name: str, timeout: int = DEFAULT_TIMEOUT) -> bool:
+    """Send a short prompt to pre-load the model into memory.
+
+    This ensures the first real benchmark run does not include model
+    loading overhead in its timing measurements.
+
+    Args:
+        model_name: Ollama model name (e.g. "llama3.2:1b").
+        timeout: Timeout in seconds for the warmup call.
+
+    Returns:
+        True if warmup succeeded, False otherwise.
+    """
+    console = get_console()
+    console.print(f"  Warming up {model_name}...", end="")
+    try:
+        run_with_timeout(
+            ollama.chat,
+            timeout,
+            model=model_name,
+            messages=[{"role": "user", "content": DEFAULT_WARMUP_PROMPT}],
+        )
+        console.print(" Ready")
+        return True
+    except Exception as exc:
+        console.print(f" [yellow]Warmup failed: {exc}[/yellow]")
+        return False
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """Return True if the exception is transient and should be retried.
+
+    Retryable: ConnectionError, TimeoutError, ollama.RequestError,
+    and ollama.ResponseError with status_code >= 500.
+
+    Non-retryable: ollama.ResponseError with status_code < 500 (e.g. 404).
+    """
+    if isinstance(exc, (ConnectionError, TimeoutError)):
+        return True
+    if isinstance(exc, _RequestError):
+        return True
+    if isinstance(exc, _ResponseError):
+        return getattr(exc, "status_code", 0) >= 500
+    return False
 
 
 def unload_model(model_name: str) -> bool:
@@ -147,14 +207,19 @@ def run_single_benchmark(
     prompt: str,
     verbose: bool = False,
     timeout: int = DEFAULT_TIMEOUT,
+    max_retries: int = DEFAULT_MAX_RETRIES,
 ) -> BenchmarkResult:
     """Execute a single benchmark: one prompt against one model.
+
+    Supports automatic retry of transient errors (ConnectionError,
+    TimeoutError, 5xx) with exponential backoff via tenacity.
 
     Args:
         model_name: Ollama model name (e.g. "llama3.2:1b").
         prompt: The prompt text to send.
         verbose: If True, stream and display response chunks.
         timeout: Timeout in seconds for the benchmark run.
+        max_retries: Maximum retry attempts (0 to disable retries).
 
     Returns:
         BenchmarkResult with success=True on success, or
@@ -191,9 +256,12 @@ def run_single_benchmark(
             )
             return response
 
-    try:
-        raw_response = run_with_timeout(_run_benchmark, timeout)
+    def _run_with_timeout() -> dict:
+        """Wrap _run_benchmark with timeout -- each retry gets full budget."""
+        return run_with_timeout(_run_benchmark, timeout)
 
+    def _parse_response(raw_response: dict) -> BenchmarkResult:
+        """Convert raw Ollama response to BenchmarkResult."""
         if raw_response is None:
             return BenchmarkResult(
                 model=model_name,
@@ -218,6 +286,28 @@ def run_single_benchmark(
             prompt_cached=response.prompt_cached,
         )
 
+    try:
+        if max_retries > 0:
+            # Build dynamic tenacity retryer (max_retries is runtime)
+            def _before_sleep(retry_state):
+                attempt = retry_state.attempt_number
+                console.print(
+                    f"    [yellow]Retry {attempt}/{max_retries}...[/yellow]"
+                )
+
+            retryer = retry(
+                stop=stop_after_attempt(max_retries + 1),
+                wait=wait_exponential(multiplier=1, min=1, max=10),
+                retry=retry_if_exception(_is_retryable),
+                before_sleep=_before_sleep,
+                reraise=True,
+            )
+            raw_response = retryer(_run_with_timeout)()
+        else:
+            raw_response = _run_with_timeout()
+
+        return _parse_response(raw_response)
+
     except TimeoutError:
         return BenchmarkResult(
             model=model_name,
@@ -240,6 +330,8 @@ def benchmark_model(
     verbose: bool = False,
     timeout: int = DEFAULT_TIMEOUT,
     runs_per_prompt: int = 1,
+    skip_warmup: bool = False,
+    max_retries: int = DEFAULT_MAX_RETRIES,
 ) -> ModelSummary:
     """Orchestrate benchmarking a single model across all prompts.
 
@@ -249,12 +341,22 @@ def benchmark_model(
         verbose: If True, stream responses.
         timeout: Per-run timeout in seconds.
         runs_per_prompt: Number of runs per prompt for statistical reliability.
+        skip_warmup: If True, skip the warmup run before benchmarking.
+        max_retries: Maximum retry attempts per run (0 to disable).
 
     Returns:
         ModelSummary with aggregated results.
     """
     console = get_console()
     all_results: list[BenchmarkResult] = []
+
+    # Warmup: pre-load model to exclude load time from measurements
+    if not skip_warmup:
+        warmup_model(model_name, timeout)
+    else:
+        console.print(
+            "  [dim]Warmup skipped -- first run may include model load time[/dim]"
+        )
 
     for prompt_idx, prompt in enumerate(prompts):
         console.print(
@@ -271,6 +373,7 @@ def benchmark_model(
                 prompt=prompt,
                 verbose=verbose,
                 timeout=timeout,
+                max_retries=max_retries,
             )
             all_results.append(result)
 
