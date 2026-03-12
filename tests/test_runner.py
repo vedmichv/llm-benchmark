@@ -362,6 +362,136 @@ class TestRetryLogic:
         assert mock_ollama.chat.call_count == 3
 
 
+class TestCacheVisibility:
+    """Test cache visibility indicators in benchmark_model terminal output."""
+
+    def _make_result(
+        self,
+        prompt_cached: bool = False,
+        eval_count: int = 100,
+        eval_duration: int = 2_000_000_000,
+        prompt_eval_count: int = 15,
+        prompt_eval_duration: int = 200_000_000,
+    ) -> BenchmarkResult:
+        """Helper to build a BenchmarkResult."""
+        resp = OllamaResponse(
+            model="test-model",
+            created_at=datetime.now(timezone.utc),
+            message={"role": "assistant", "content": "test"},
+            done=True,
+            total_duration=prompt_eval_duration + eval_duration,
+            load_duration=0,
+            prompt_eval_count=prompt_eval_count,
+            prompt_eval_duration=prompt_eval_duration,
+            eval_count=eval_count,
+            eval_duration=eval_duration,
+            prompt_cached=prompt_cached,
+        )
+        return BenchmarkResult(
+            model="test-model",
+            prompt="test prompt",
+            success=True,
+            response=resp,
+            prompt_cached=prompt_cached,
+        )
+
+    @patch("llm_benchmark.runner.warmup_model", return_value=True)
+    @patch("llm_benchmark.runner.run_single_benchmark")
+    def test_cached_result_shows_cached_tag(self, mock_run, mock_warmup):
+        """When result.prompt_cached is True, '[cached]' appears in console output."""
+        import io
+        from rich.console import Console
+        from llm_benchmark.runner import benchmark_model
+
+        buf = io.StringIO()
+        test_console = Console(file=buf, force_terminal=False, no_color=True)
+
+        mock_run.return_value = self._make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0)
+
+        with patch("llm_benchmark.runner.get_console", return_value=test_console):
+            benchmark_model("test-model", ["test prompt"], skip_warmup=True)
+
+        output = buf.getvalue()
+        assert "[cached]" in output
+
+    @patch("llm_benchmark.runner.warmup_model", return_value=True)
+    @patch("llm_benchmark.runner.run_single_benchmark")
+    def test_first_cached_shows_explanation(self, mock_run, mock_warmup):
+        """First cached result in session triggers one-liner explanation."""
+        import io
+        from rich.console import Console
+        from llm_benchmark.runner import benchmark_model
+
+        buf = io.StringIO()
+        test_console = Console(file=buf, force_terminal=False, no_color=True)
+
+        mock_run.return_value = self._make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0)
+
+        with patch("llm_benchmark.runner.get_console", return_value=test_console):
+            benchmark_model("test-model", ["test prompt"], skip_warmup=True)
+
+        output = buf.getvalue()
+        assert "Prompt caching" in output
+
+    @patch("llm_benchmark.runner.warmup_model", return_value=True)
+    @patch("llm_benchmark.runner.run_single_benchmark")
+    def test_second_cached_no_repeat_explanation(self, mock_run, mock_warmup):
+        """Second cached result does NOT repeat the explanation."""
+        import io
+        from rich.console import Console
+        from llm_benchmark.runner import benchmark_model
+
+        buf = io.StringIO()
+        test_console = Console(file=buf, force_terminal=False, no_color=True)
+
+        mock_run.return_value = self._make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0)
+
+        with patch("llm_benchmark.runner.get_console", return_value=test_console):
+            benchmark_model("test-model", ["prompt one", "prompt two"], skip_warmup=True)
+
+        output = buf.getvalue()
+        # "Prompt caching" should appear exactly once
+        assert output.count("Prompt caching") == 1
+
+    @patch("llm_benchmark.runner.warmup_model", return_value=True)
+    @patch("llm_benchmark.runner.run_single_benchmark")
+    def test_all_cached_shows_warning(self, mock_run, mock_warmup):
+        """When ALL results for a model are cached, warning about unavailable prompt eval metrics is shown."""
+        import io
+        from rich.console import Console
+        from llm_benchmark.runner import benchmark_model
+
+        buf = io.StringIO()
+        test_console = Console(file=buf, force_terminal=False, no_color=True)
+
+        mock_run.return_value = self._make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0)
+
+        with patch("llm_benchmark.runner.get_console", return_value=test_console):
+            benchmark_model("test-model", ["prompt one", "prompt two"], skip_warmup=True)
+
+        output = buf.getvalue()
+        assert "prompt eval metrics unavailable" in output.lower() or "All runs cached" in output
+
+    @patch("llm_benchmark.runner.warmup_model", return_value=True)
+    @patch("llm_benchmark.runner.run_single_benchmark")
+    def test_non_cached_no_tag(self, mock_run, mock_warmup):
+        """Non-cached results do NOT show [cached] tag."""
+        import io
+        from rich.console import Console
+        from llm_benchmark.runner import benchmark_model
+
+        buf = io.StringIO()
+        test_console = Console(file=buf, force_terminal=False, no_color=True)
+
+        mock_run.return_value = self._make_result(prompt_cached=False)
+
+        with patch("llm_benchmark.runner.get_console", return_value=test_console):
+            benchmark_model("test-model", ["test prompt"], skip_warmup=True)
+
+        output = buf.getvalue()
+        assert "[cached]" not in output
+
+
 class TestBenchmarkModelWarmup:
     """Test warmup integration in benchmark_model."""
 
