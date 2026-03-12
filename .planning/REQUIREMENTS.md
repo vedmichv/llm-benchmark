@@ -16,8 +16,8 @@
 
 ### Benchmarking (BENCH)
 
-- [ ] **BENCH-01**: Tool runs warmup requests before actual measurements to exclude model load overhead
-- [ ] **BENCH-02**: Tool retries failed requests with exponential backoff (configurable max retries)
+- [x] **BENCH-01**: Tool runs warmup requests before actual measurements to exclude model load overhead
+- [x] **BENCH-02**: Tool retries failed requests with exponential backoff (configurable max retries)
 - [ ] **BENCH-03**: User can run concurrent benchmark with --concurrent N (parallel requests to same model)
 - [ ] **BENCH-04**: Concurrent mode reports aggregate throughput (total_tokens/wall_time) and per-request average
 - [ ] **BENCH-05**: User can run parameter sweep with --sweep (auto-explore num_ctx, num_gpu combinations)
@@ -87,8 +87,8 @@
 | QUAL-01 | Phase 1 | Complete |
 | QUAL-02 | Phase 1 | Complete |
 | QUAL-05 | Phase 1 | Complete |
-| BENCH-01 | Phase 2 | Pending |
-| BENCH-02 | Phase 2 | Pending |
+| BENCH-01 | Phase 2 | Complete |
+| BENCH-02 | Phase 2 | Complete |
 | BENCH-07 | Phase 2 | Pending |
 | UX-04 | Phase 2 | Pending |
 | BENCH-03 | Phase 3 | Pending |
