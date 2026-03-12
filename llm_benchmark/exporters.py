@@ -14,10 +14,30 @@ from pathlib import Path
 from llm_benchmark.models import ModelSummary, SystemInfo, _ns_to_sec
 
 
+_RESULTS_GITIGNORE = """\
+# Benchmark result files -- do not commit
+*.json
+*.csv
+*.md
+!.gitignore
+"""
+
+
 def _ensure_dir(output_dir: str | Path) -> Path:
-    """Ensure the output directory exists and return it as a Path."""
+    """Ensure the output directory exists and return it as a Path.
+
+    If the directory name is 'results', auto-creates a .gitignore to
+    prevent accidental commits of benchmark output files.
+    """
     path = Path(output_dir)
     path.mkdir(parents=True, exist_ok=True)
+
+    # Auto-create .gitignore for results/ directories
+    if path.name == "results":
+        gitignore = path / ".gitignore"
+        if not gitignore.exists():
+            gitignore.write_text(_RESULTS_GITIGNORE)
+
     return path
 
 
@@ -129,6 +149,7 @@ def export_csv(
             "Model",
             "Prompt",
             "Success",
+            "Cached",
             "Prompt Tokens",
             "Response Tokens",
             "Prompt Eval (t/s)",
@@ -155,6 +176,7 @@ def export_csv(
                         run.model,
                         run.prompt[:60] + ("..." if len(run.prompt) > 60 else ""),
                         "Yes",
+                        "Yes" if run.prompt_cached else "No",
                         r.prompt_eval_count,
                         r.eval_count,
                         f"{prompt_ts:.2f}",
@@ -168,6 +190,7 @@ def export_csv(
                         run.model,
                         run.prompt[:60] + ("..." if len(run.prompt) > 60 else ""),
                         "No",
+                        "",
                         "",
                         "",
                         "",
@@ -239,8 +262,9 @@ def export_markdown(
         lines.append(f"### {s.model}\n")
         for idx, run in enumerate(s.results):
             status = "OK" if run.success else "FAIL"
+            cached_indicator = " [cached]" if run.prompt_cached else ""
             lines.append(
-                f"{idx + 1}. **{status}** `{run.prompt[:50]}...`"
+                f"{idx + 1}. **{status}**{cached_indicator} `{run.prompt[:50]}...`"
             )
             if run.success and run.response:
                 r = run.response

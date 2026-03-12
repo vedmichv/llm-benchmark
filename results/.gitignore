@@ -1,0 +1,5 @@
+# Benchmark result files -- do not commit
+*.json
+*.csv
+*.md
+!.gitignore
