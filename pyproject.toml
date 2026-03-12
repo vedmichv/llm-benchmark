@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llm-benchmark"
+version = "2.0.0"
+description = "Measure token throughput of LLMs running via Ollama"
+requires-python = ">= 3.12"
+license = "MIT"
+dependencies = [
+    "ollama>=0.6",
+    "pydantic>=2.9",
+    "rich>=14.0",
+    "tenacity>=9.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0"]
+
+[project.scripts]
+llm-benchmark = "llm_benchmark.cli:main"
