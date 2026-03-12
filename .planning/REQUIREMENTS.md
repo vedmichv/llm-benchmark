@@ -8,8 +8,8 @@
 ### Stability (STAB)
 
 - [x] **STAB-01**: Benchmark runs without crashes on Windows, macOS, and Linux
-- [ ] **STAB-02**: Tool checks Ollama connectivity before starting and shows actionable error if unreachable
-- [ ] **STAB-03**: Tool checks available RAM and GPU before benchmark and warns if resources are insufficient for selected models
+- [x] **STAB-02**: Tool checks Ollama connectivity before starting and shows actionable error if unreachable
+- [x] **STAB-03**: Tool checks available RAM and GPU before benchmark and warns if resources are insufficient for selected models
 - [x] **STAB-04**: Throughput averaging uses total_tokens/total_time (not arithmetic mean of rates)
 - [x] **STAB-05**: Model offloading works without sudo via Ollama API (keep_alive=0)
 - [x] **STAB-06**: Timeouts work cross-platform via threading (no signal.SIGALRM)
@@ -79,8 +79,8 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | STAB-01 | Phase 1 | Complete |
-| STAB-02 | Phase 1 | Pending |
-| STAB-03 | Phase 1 | Pending |
+| STAB-02 | Phase 1 | Complete |
+| STAB-03 | Phase 1 | Complete |
 | STAB-04 | Phase 1 | Complete |
 | STAB-05 | Phase 1 | Complete |
 | STAB-06 | Phase 1 | Complete |
