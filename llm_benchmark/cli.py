@@ -10,6 +10,7 @@ import argparse
 import sys
 
 from llm_benchmark.config import (
+    DEFAULT_MAX_RETRIES,
     DEFAULT_RUNS_PER_PROMPT,
     DEFAULT_TIMEOUT,
     get_console,
@@ -71,6 +72,17 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_TIMEOUT,
         help=f"Per-run timeout in seconds (default: {DEFAULT_TIMEOUT})",
+    )
+    run_parser.add_argument(
+        "--skip-warmup",
+        action="store_true",
+        help="Skip model warmup before benchmarking",
+    )
+    run_parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=DEFAULT_MAX_RETRIES,
+        help=f"Max retries per failed run (default: {DEFAULT_MAX_RETRIES}, 0 to disable)",
     )
 
     # compare subcommand
@@ -141,6 +153,8 @@ def _handle_run(args: argparse.Namespace) -> int:
                 verbose=args.verbose,
                 timeout=args.timeout,
                 runs_per_prompt=args.runs_per_prompt,
+                skip_warmup=args.skip_warmup,
+                max_retries=args.max_retries,
             )
             all_summaries.append(summary)
 

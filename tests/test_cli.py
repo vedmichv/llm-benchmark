@@ -25,6 +25,8 @@ class TestRunSubcommand:
         assert args.prompts is None
         assert args.runs_per_prompt == 2
         assert args.timeout == 300
+        assert args.skip_warmup is False
+        assert args.max_retries == 3
 
     def test_run_with_all_flags(self):
         """Verify all run flags parse correctly."""
@@ -39,6 +41,8 @@ class TestRunSubcommand:
             "--prompt-set", "large",
             "--runs-per-prompt", "3",
             "--timeout", "600",
+            "--skip-warmup",
+            "--max-retries", "5",
         ])
         assert args.verbose is True
         assert args.skip_checks is True
@@ -46,6 +50,8 @@ class TestRunSubcommand:
         assert args.prompt_set == "large"
         assert args.runs_per_prompt == 3
         assert args.timeout == 600
+        assert args.skip_warmup is True
+        assert args.max_retries == 5
 
 
 class TestCompareSubcommand:
@@ -113,3 +119,51 @@ class TestHelpAndDebug:
         # Reset debug state
         from llm_benchmark.config import set_debug
         set_debug(False)
+
+
+class TestSkipWarmup:
+    """Tests for --skip-warmup CLI flag."""
+
+    def test_skip_warmup_flag_parsed(self):
+        """--skip-warmup flag parsed as True."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["run", "--skip-warmup"])
+        assert args.skip_warmup is True
+
+    def test_skip_warmup_default_false(self):
+        """Default is False when --skip-warmup not provided."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["run"])
+        assert args.skip_warmup is False
+
+
+class TestMaxRetries:
+    """Tests for --max-retries CLI flag."""
+
+    def test_max_retries_parsed(self):
+        """--max-retries 5 parsed as integer 5."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["run", "--max-retries", "5"])
+        assert args.max_retries == 5
+
+    def test_max_retries_zero(self):
+        """--max-retries 0 parsed as integer 0."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["run", "--max-retries", "0"])
+        assert args.max_retries == 0
+
+    def test_max_retries_default(self):
+        """Default is 3 when --max-retries not provided."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["run"])
+        assert args.max_retries == 3
