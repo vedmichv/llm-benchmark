@@ -29,9 +29,10 @@ def models():
 class TestQuickTestMode:
     """Quick-test mode selects smallest model and skips everything else."""
 
+    @patch("llm_benchmark.recommend.offer_model_downloads", side_effect=lambda m: m)
     @patch("llm_benchmark.menu.get_console")
     @patch("llm_benchmark.system.format_system_summary", return_value="sys info")
-    def test_quick_test_mode(self, _mock_summary, _mock_console, models):
+    def test_quick_test_mode(self, _mock_summary, _mock_console, _mock_rec, models):
         """Mode '1' returns quick-test Namespace."""
         from llm_benchmark.menu import run_interactive_menu
 
@@ -47,9 +48,10 @@ class TestQuickTestMode:
         assert "big-model:7b" in ns.skip_models
         assert "mid-model:3b" in ns.skip_models
 
+    @patch("llm_benchmark.recommend.offer_model_downloads", side_effect=lambda m: m)
     @patch("llm_benchmark.menu.get_console")
     @patch("llm_benchmark.system.format_system_summary", return_value="sys info")
-    def test_smallest_model_selection(self, _mock_summary, _mock_console):
+    def test_smallest_model_selection(self, _mock_summary, _mock_console, _mock_rec):
         """Quick test picks the model with the smallest .size."""
         from llm_benchmark.menu import run_interactive_menu
 
@@ -70,9 +72,10 @@ class TestQuickTestMode:
 class TestStandardMode:
     """Standard benchmark mode."""
 
+    @patch("llm_benchmark.recommend.offer_model_downloads", side_effect=lambda m: m)
     @patch("llm_benchmark.menu.get_console")
     @patch("llm_benchmark.system.format_system_summary", return_value="sys info")
-    def test_standard_mode(self, _mock_summary, _mock_console, models):
+    def test_standard_mode(self, _mock_summary, _mock_console, _mock_rec, models):
         """Mode '2' returns standard Namespace."""
         from llm_benchmark.menu import run_interactive_menu
 
@@ -87,9 +90,10 @@ class TestStandardMode:
 class TestFullMode:
     """Full benchmark mode."""
 
+    @patch("llm_benchmark.recommend.offer_model_downloads", side_effect=lambda m: m)
     @patch("llm_benchmark.menu.get_console")
     @patch("llm_benchmark.system.format_system_summary", return_value="sys info")
-    def test_full_mode(self, _mock_summary, _mock_console, models):
+    def test_full_mode(self, _mock_summary, _mock_console, _mock_rec, models):
         """Mode '3' returns full Namespace."""
         from llm_benchmark.menu import run_interactive_menu
 
@@ -104,9 +108,10 @@ class TestFullMode:
 class TestCustomMode:
     """Custom mode with multiple inputs."""
 
+    @patch("llm_benchmark.recommend.offer_model_downloads", side_effect=lambda m: m)
     @patch("llm_benchmark.menu.get_console")
     @patch("llm_benchmark.system.format_system_summary", return_value="sys info")
-    def test_custom_mode(self, _mock_summary, _mock_console, models):
+    def test_custom_mode(self, _mock_summary, _mock_console, _mock_rec, models):
         """Mode '4' prompts for prompt set, runs, and model skip."""
         from llm_benchmark.menu import run_interactive_menu
 
@@ -123,9 +128,10 @@ class TestCustomMode:
 class TestInvalidInput:
     """Invalid input handling and re-prompting."""
 
+    @patch("llm_benchmark.recommend.offer_model_downloads", side_effect=lambda m: m)
     @patch("llm_benchmark.menu.get_console")
     @patch("llm_benchmark.system.format_system_summary", return_value="sys info")
-    def test_invalid_input_reprompts(self, _mock_summary, _mock_console, models):
+    def test_invalid_input_reprompts(self, _mock_summary, _mock_console, _mock_rec, models):
         """Invalid choices cause re-prompting until valid input."""
         from llm_benchmark.menu import run_interactive_menu
 

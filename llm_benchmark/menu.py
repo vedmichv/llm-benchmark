@@ -189,6 +189,12 @@ def run_interactive_menu(models: list) -> argparse.Namespace:
     console.print(format_system_summary())
     console.print()
 
+    # Offer model downloads if RAM allows recommendations
+    from llm_benchmark.recommend import offer_model_downloads
+
+    models = offer_model_downloads(models)
+    console.print()
+
     # Menu
     console.print("  1. Quick test (~30 seconds)")
     console.print("  2. Standard benchmark")
