@@ -104,6 +104,8 @@ Recent decisions affecting current work:
 - [Phase 04]: Concurrent rankings use max aggregate_throughput_ts per model across batches
 - [Phase 04]: Ignored E501 in ruff config due to long string literals in prompts/tests
 - [Phase 04]: Consolidated pytest into dev dep group, removed optional-deps test section
+- [Quick-1]: Import _get_ram_gb from system.py for shared RAM detection
+- [Quick-1]: Mock offer_model_downloads in menu tests to isolate input sequences
 
 ### Pending Todos
 
@@ -115,6 +117,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-13T12:51:03.259Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-03-13T15:04:35Z
+Stopped at: Completed quick-1-PLAN.md (model recommender)
 Resume file: None
