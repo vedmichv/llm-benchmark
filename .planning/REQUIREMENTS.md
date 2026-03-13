@@ -20,8 +20,8 @@
 - [x] **BENCH-02**: Tool retries failed requests with exponential backoff (configurable max retries)
 - [ ] **BENCH-03**: User can run concurrent benchmark with --concurrent N (parallel requests to same model)
 - [ ] **BENCH-04**: Concurrent mode reports aggregate throughput (total_tokens/wall_time) and per-request average
-- [ ] **BENCH-05**: User can run parameter sweep with --sweep (auto-explore num_ctx, num_gpu combinations)
-- [ ] **BENCH-06**: Sweep reports best configuration found with throughput numbers
+- [x] **BENCH-05**: User can run parameter sweep with --sweep (auto-explore num_ctx, num_gpu combinations)
+- [x] **BENCH-06**: Sweep reports best configuration found with throughput numbers
 - [x] **BENCH-07**: Prompt caching detection excludes affected metrics from averages (instead of silently corrupting)
 
 ### Analysis (ANLZ)
@@ -93,8 +93,8 @@
 | UX-04 | Phase 2 | Complete |
 | BENCH-03 | Phase 3 | Pending |
 | BENCH-04 | Phase 3 | Pending |
-| BENCH-05 | Phase 3 | Pending |
-| BENCH-06 | Phase 3 | Pending |
+| BENCH-05 | Phase 3 | Complete |
+| BENCH-06 | Phase 3 | Complete |
 | ANLZ-01 | Phase 3 | Complete |
 | ANLZ-02 | Phase 3 | Complete |
 | ANLZ-03 | Phase 3 | Complete |

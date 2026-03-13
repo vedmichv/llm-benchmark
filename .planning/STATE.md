@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-03-13T08:43:33.035Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-13T08:43:55.149Z"
 last_activity: 2026-03-12 -- Plan 02-02 executed (cache visibility)
 progress:
   total_phases: 4
@@ -52,6 +52,7 @@ Progress: [█████░░░░░] 50%
 
 *Updated after each plan completion*
 | Phase 03 P03 | 5min | 2 tasks | 3 files |
+| Phase 03 P02 | 5min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,8 @@ Recent decisions affecting current work:
 - [Phase 03]: Analyze returns void, prints to console only (no file export)
 - [Phase 03]: load_time computed from run-level load_duration_s averages
 - [Phase 03]: Winner column only for 2-file comparisons
+- [Phase 03]: Import SweepConfigResult/SweepModelResult from models.py (Plan 01 created them)
+- [Phase 03]: Unload model between sweep configs to force Ollama reload with new num_ctx/num_gpu options
 
 ### Pending Todos
 
@@ -91,6 +94,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-13T08:43:25.563Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-03-13T08:43:55.147Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
