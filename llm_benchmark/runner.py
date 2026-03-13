@@ -131,15 +131,27 @@ def _is_retryable(exc: BaseException) -> bool:
     return False
 
 
+def _get_model_size_gb(model_name: str) -> float | None:
+    """Get on-disk model size in GB from ollama.list()."""
+    try:
+        response = ollama.list()
+        for m in response.models:
+            if m.model == model_name:
+                return m.size / (1024**3)
+    except Exception:
+        pass
+    return None
+
+
 def detect_num_ctx(model_name: str) -> int:
     """Auto-detect a reasonable num_ctx for a model.
 
-    Queries Ollama for the model's max context length and picks a sensible
-    default based on model capabilities. Thinking models get larger context
-    to accommodate chain-of-thought reasoning.
+    Scales context window based on model size to avoid OOM on small models.
+    Thinking models get larger context than non-thinking, but still capped
+    by model size to prevent KV cache from dominating memory.
 
     Returns:
-        Recommended num_ctx value (4096-32768).
+        Recommended num_ctx value (2048-16384).
     """
     console = get_console()
     try:
@@ -162,12 +174,30 @@ def detect_num_ctx(model_name: str) -> int:
             for t in ["qwen3.5", "deepseek-r1", "deepseek-r2"]
         )
 
-        target = min(max_ctx, 32768) if is_thinking else min(max_ctx, 8192)
+        # Scale num_ctx by model size to avoid OOM on small models
+        size_gb = _get_model_size_gb(model_name)
 
-        console.print(
-            f"  [dim]Context window: {target:,} tokens"
-            f"{' (thinking model)' if is_thinking else ''}[/dim]"
-        )
+        if size_gb is not None:
+            if size_gb < 3:
+                # Tiny models (<3 GB): 2048 for normal, 4096 for thinking
+                target = 4096 if is_thinking else 2048
+            elif size_gb < 8:
+                # Small models (3-8 GB): 4096 for normal, 8192 for thinking
+                target = 8192 if is_thinking else 4096
+            elif size_gb < 20:
+                # Medium models (8-20 GB): 8192 for normal, 16384 for thinking
+                target = 16384 if is_thinking else 8192
+            else:
+                # Large models (20+ GB): 8192 for normal, 16384 for thinking
+                target = 16384 if is_thinking else 8192
+        else:
+            target = 8192 if is_thinking else 4096
+
+        target = min(target, max_ctx)
+
+        label = " (thinking)" if is_thinking else ""
+        size_label = f", {size_gb:.0f} GB" if size_gb else ""
+        console.print(f"  [dim]Context: {target:,} tokens{label}{size_label}[/dim]")
         return target
 
     except Exception:
