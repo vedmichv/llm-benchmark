@@ -60,11 +60,13 @@ Plans:
   2. Student can run `--sweep` and the tool automatically tests combinations of num_ctx and num_gpu, reporting the best configuration found
   3. Student can sort benchmark results by any metric and filter to top-N models from saved results
   4. Student can compare results from two different runs side-by-side to see how hardware or config changes affected performance
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md -- Concurrent benchmarking module (data models, async orchestration, tests)
+- [ ] 03-02-PLAN.md -- Parameter sweep module (num_ctx/num_gpu sweep, best config detection)
+- [ ] 03-03-PLAN.md -- Analyze subcommand and compare enhancements (sort, filter, arrows, winner)
+- [ ] 03-04-PLAN.md -- CLI wiring and mode-aware exporters (integrate all Phase 3 modules)
 
 ### Phase 4: Student Experience
 **Goal**: Students who have never used CLI tools can run benchmarks through an interactive menu, see visual ranked results, and share reports with classmates
@@ -91,5 +93,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete   | 2026-03-12 |
 | 2. Measurement Reliability | 0/2 | Not started | - |
-| 3. Advanced Benchmarking | 0/0 | Not started | - |
+| 3. Advanced Benchmarking | 0/4 | Not started | - |
 | 4. Student Experience | 0/0 | Not started | - |
