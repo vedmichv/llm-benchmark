@@ -78,11 +78,12 @@ Plans:
   3. After a benchmark completes, the student sees a ranked bar chart in the terminal showing model comparison
   4. Results include system info, model rankings, and a recommendation for which model/config is best for this hardware
   5. Unit tests exist with mocked Ollama covering core functions (>60% coverage) and GitHub Actions runs lint + tests on push
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [ ] 04-01-PLAN.md -- Interactive menu module and terminal bar chart display
+- [ ] 04-02-PLAN.md -- Enhanced Markdown reports with rankings, recommendations, and text bar charts
+- [ ] 04-03-PLAN.md -- Unit tests for new modules, ruff linting, pytest-cov, GitHub Actions CI
 
 ## Progress
 
@@ -94,4 +95,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. Foundation | 3/3 | Complete   | 2026-03-12 |
 | 2. Measurement Reliability | 0/2 | Not started | - |
 | 3. Advanced Benchmarking | 0/4 | Not started | - |
-| 4. Student Experience | 0/0 | Not started | - |
+| 4. Student Experience | 0/3 | Not started | - |
