@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Lint with ruff
+        run: uv run ruff check llm_benchmark/ tests/
+
+      - name: Compile check
+        run: |
+          python -m py_compile llm_benchmark/__init__.py
+          python -m py_compile llm_benchmark/cli.py
+          python -m py_compile llm_benchmark/runner.py
+          python -m py_compile llm_benchmark/models.py
+          python -m py_compile llm_benchmark/exporters.py
+          python -m py_compile llm_benchmark/config.py
+          python -m py_compile llm_benchmark/menu.py
+          python -m py_compile llm_benchmark/display.py
+
+      - name: Run tests
+        run: uv run pytest tests/ -x -q

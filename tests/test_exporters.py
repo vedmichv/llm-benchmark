@@ -1,10 +1,7 @@
 """Tests for llm_benchmark.exporters module -- cache indicators and output."""
 
 import csv
-from datetime import datetime, timezone
-from pathlib import Path
-
-import pytest
+from datetime import UTC, datetime
 
 from llm_benchmark.models import (
     BenchmarkResult,
@@ -32,7 +29,7 @@ def _make_result(
         )
     resp = OllamaResponse(
         model="test-model",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         message={"role": "assistant", "content": "test response"},
         done=True,
         total_duration=prompt_eval_duration + eval_duration,
@@ -215,3 +212,82 @@ class TestExporterOutputDir:
         filepath = export_json([summary], output_dir=tmp_path)
         assert filepath.parent == tmp_path
         assert filepath.exists()
+
+
+class TestMarkdownRankings:
+    """Test that Markdown export includes rankings section."""
+
+    def _make_system_info(self):
+        from llm_benchmark.models import SystemInfo
+
+        return SystemInfo(
+            cpu="Apple M1",
+            ram_gb=16.0,
+            gpu="Apple M1 (integrated)",
+            os_name="macOS 14.0",
+            python_version="3.12.0",
+            ollama_version="0.6.1",
+        )
+
+    def test_export_markdown_has_rankings(self, tmp_path):
+        """Markdown report includes Rankings section with bar chart."""
+        from llm_benchmark.exporters import export_markdown
+
+        summaries = [
+            ModelSummary(
+                model="fast-model:1b",
+                results=[_make_result()],
+                avg_prompt_eval_ts=100.0,
+                avg_response_ts=50.0,
+                avg_total_ts=45.0,
+            ),
+            ModelSummary(
+                model="slow-model:7b",
+                results=[_make_result()],
+                avg_prompt_eval_ts=40.0,
+                avg_response_ts=20.0,
+                avg_total_ts=18.0,
+            ),
+        ]
+        filepath = export_markdown(
+            summaries,
+            system_info=self._make_system_info(),
+            output_dir=tmp_path,
+        )
+        content = filepath.read_text()
+
+        assert "## Rankings" in content
+        assert "Best for your setup" in content
+        # Bar chart chars
+        assert "\u2588" in content
+
+    def test_export_markdown_compact_header(self, tmp_path):
+        """Markdown includes compact header with mode and model count."""
+        from llm_benchmark.exporters import export_markdown
+
+        summary = _make_summary([_make_result()])
+        filepath = export_markdown(
+            [summary],
+            system_info=self._make_system_info(),
+            output_dir=tmp_path,
+        )
+        content = filepath.read_text()
+
+        assert "**Mode:** Standard" in content
+        assert "**Models:** 1" in content
+
+    def test_export_markdown_one_line_system_info(self, tmp_path):
+        """Markdown has one-line system info, not multi-line bullets."""
+        from llm_benchmark.exporters import export_markdown
+
+        summary = _make_summary([_make_result()])
+        filepath = export_markdown(
+            [summary],
+            system_info=self._make_system_info(),
+            output_dir=tmp_path,
+        )
+        content = filepath.read_text()
+
+        assert "**System:**" in content
+        assert "Apple M1" in content
+        assert "16.0 GB RAM" in content
