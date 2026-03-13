@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 
 ## Current Position
 
-Phase: 2 of 4 (Measurement Reliability) -- COMPLETE
-Plan: 2 of 2 in current phase
-Status: Phase 2 Complete
-Last activity: 2026-03-12 -- Plan 02-02 executed (cache visibility)
+Phase: 3 of 4 (Advanced Benchmarking) -- IN PROGRESS
+Plan: 1 of 4 in current phase
+Status: Plan 03-01 complete (concurrent benchmarking)
+Last activity: 2026-03-13 -- Plan 03-01 executed (concurrent benchmarking)
 
 Progress: [█████░░░░░] 50%
 
@@ -51,6 +51,7 @@ Progress: [█████░░░░░] 50%
 - Trend: Steady
 
 *Updated after each plan completion*
+| Phase 03 P01 | 7min | 2 tasks | 7 files |
 | Phase 03 P03 | 5min | 2 tasks | 3 files |
 | Phase 03 P02 | 5min | 1 tasks | 2 files |
 
@@ -81,6 +82,10 @@ Recent decisions affecting current work:
 - [Phase 03]: Analyze returns void, prints to console only (no file export)
 - [Phase 03]: load_time computed from run-level load_duration_s averages
 - [Phase 03]: Winner column only for 2-file comparisons
+- [03-01]: AsyncClient used as async context manager for proper connection cleanup
+- [03-01]: Per-request try/except in _single_request rather than gather return_exceptions
+- [03-01]: aggregate_throughput_ts = sum(eval_count) / wall_time (not mean of rates)
+- [03-01]: auto_detect_concurrency thresholds: 8 (VRAM>=16), 4 (RAM>=32), 2 (default)
 - [Phase 03]: Import SweepConfigResult/SweepModelResult from models.py (Plan 01 created them)
 - [Phase 03]: Unload model between sweep configs to force Ollama reload with new num_ctx/num_gpu options
 
@@ -94,6 +99,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-13T08:43:55.147Z
-Stopped at: Completed 03-02-PLAN.md
-Resume file: None
+Last session: 2026-03-13T08:44:00Z
+Stopped at: Completed 03-01-PLAN.md
+Resume file: .planning/phases/03-advanced-benchmarking/03-01-SUMMARY.md
