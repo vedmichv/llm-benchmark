@@ -26,9 +26,9 @@
 
 ### Analysis (ANLZ)
 
-- [ ] **ANLZ-01**: User can sort benchmark results by any metric (response_ts, total_ts, load_time)
-- [ ] **ANLZ-02**: User can filter top-N results from CSV/JSON output
-- [ ] **ANLZ-03**: User can compare results from multiple runs side-by-side
+- [x] **ANLZ-01**: User can sort benchmark results by any metric (response_ts, total_ts, load_time)
+- [x] **ANLZ-02**: User can filter top-N results from CSV/JSON output
+- [x] **ANLZ-03**: User can compare results from multiple runs side-by-side
 
 ### UX (UX)
 
@@ -95,9 +95,9 @@
 | BENCH-04 | Phase 3 | Pending |
 | BENCH-05 | Phase 3 | Pending |
 | BENCH-06 | Phase 3 | Pending |
-| ANLZ-01 | Phase 3 | Pending |
-| ANLZ-02 | Phase 3 | Pending |
-| ANLZ-03 | Phase 3 | Pending |
+| ANLZ-01 | Phase 3 | Complete |
+| ANLZ-02 | Phase 3 | Complete |
+| ANLZ-03 | Phase 3 | Complete |
 | UX-01 | Phase 4 | Pending |
 | UX-02 | Phase 4 | Pending |
 | UX-03 | Phase 4 | Pending |
