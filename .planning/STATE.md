@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-13T08:43:55.149Z"
-last_activity: 2026-03-12 -- Plan 02-02 executed (cache visibility)
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-03-13T09:04:00.000Z"
+last_activity: 2026-03-13 -- Plan 03-04 executed (CLI integration and exporters)
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 9
-  completed_plans: 7
-  percent: 50
+  completed_plans: 9
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 
 ## Current Position
 
-Phase: 3 of 4 (Advanced Benchmarking) -- IN PROGRESS
-Plan: 1 of 4 in current phase
-Status: Plan 03-01 complete (concurrent benchmarking)
-Last activity: 2026-03-13 -- Plan 03-01 executed (concurrent benchmarking)
+Phase: 3 of 4 (Advanced Benchmarking) -- COMPLETE
+Plan: 4 of 4 in current phase
+Status: Plan 03-04 complete (CLI integration and exporters)
+Last activity: 2026-03-13 -- Plan 03-04 executed (CLI integration and exporters)
 
-Progress: [█████░░░░░] 50%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [█████░░░░░] 50%
 | Phase 03 P01 | 7min | 2 tasks | 7 files |
 | Phase 03 P03 | 5min | 2 tasks | 3 files |
 | Phase 03 P02 | 5min | 1 tasks | 2 files |
+| Phase 03 P04 | 15min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,9 @@ Recent decisions affecting current work:
 - [03-01]: auto_detect_concurrency thresholds: 8 (VRAM>=16), 4 (RAM>=32), 2 (default)
 - [Phase 03]: Import SweepConfigResult/SweepModelResult from models.py (Plan 01 created them)
 - [Phase 03]: Unload model between sweep configs to force Ollama reload with new num_ctx/num_gpu options
+- [03-04]: Mutually exclusive argparse group for --concurrent and --sweep
+- [03-04]: Standard exports include mode="standard" for forward compatibility
+- [03-04]: Sweep exports use sweep_ prefix; concurrent exports use benchmark_ prefix
 
 ### Pending Todos
 
@@ -99,6 +103,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-13T08:44:00Z
-Stopped at: Completed 03-01-PLAN.md
-Resume file: .planning/phases/03-advanced-benchmarking/03-01-SUMMARY.md
+Last session: 2026-03-13T09:04:00Z
+Stopped at: Completed 03-04-PLAN.md
+Resume file: .planning/phases/03-advanced-benchmarking/03-04-SUMMARY.md
