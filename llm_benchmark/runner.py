@@ -458,13 +458,11 @@ def benchmark_model(
                 console.print(f"    [red]Failed: {result.error}[/red]")
                 if "Timeout" in (result.error or ""):
                     console.print(
-                        "    [dim]This is normal for thinking models (qwen3.5, deepseek-r1) "
-                        "on complex prompts.[/dim]"
+                        "    [dim]Skipping remaining runs — reloading model...[/dim]"
                     )
-                    console.print(
-                        "    [dim]Tip: increase with --timeout 600 "
-                        "or use --prompt-set small[/dim]"
-                    )
+                    unload_model(model_name)
+                    warmup_model(model_name, timeout)
+                    break  # skip remaining runs, move to next prompt
 
     # Warn if all successful results are cached
     successful = [r for r in all_results if r.success]
