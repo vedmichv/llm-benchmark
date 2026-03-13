@@ -8,6 +8,115 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+class TestOllamaInstallation:
+    """Tests for check_ollama_installed()."""
+
+    def test_binary_found_returns_true(self, capsys):
+        """When shutil.which('ollama') returns a path, returns True without output."""
+        from llm_benchmark.preflight import check_ollama_installed
+
+        with patch("llm_benchmark.preflight.shutil.which", return_value="/usr/local/bin/ollama"):
+            result = check_ollama_installed()
+
+        assert result is True
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+    def test_binary_not_found_user_declines(self, capsys):
+        """When binary missing and user inputs 'n', returns False with platform-specific command."""
+        from llm_benchmark.preflight import check_ollama_installed
+
+        with (
+            patch("llm_benchmark.preflight.shutil.which", return_value=None),
+            patch("llm_benchmark.preflight.platform.system", return_value="Darwin"),
+            patch("builtins.input", return_value="n"),
+        ):
+            result = check_ollama_installed()
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "not installed" in captured.out.lower() or "Ollama is not installed" in captured.out
+        assert "curl -fsSL https://ollama.com/install.sh | sh" in captured.out
+
+    def test_binary_not_found_user_declines_windows(self, capsys):
+        """Windows shows PowerShell install command."""
+        from llm_benchmark.preflight import check_ollama_installed
+
+        with (
+            patch("llm_benchmark.preflight.shutil.which", return_value=None),
+            patch("llm_benchmark.preflight.platform.system", return_value="Windows"),
+            patch("builtins.input", return_value="n"),
+        ):
+            result = check_ollama_installed()
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "irm https://ollama.com/install.ps1 | iex" in captured.out
+
+    def test_binary_not_found_user_declines_linux(self, capsys):
+        """Linux shows curl install command."""
+        from llm_benchmark.preflight import check_ollama_installed
+
+        with (
+            patch("llm_benchmark.preflight.shutil.which", return_value=None),
+            patch("llm_benchmark.preflight.platform.system", return_value="Linux"),
+            patch("builtins.input", return_value="n"),
+        ):
+            result = check_ollama_installed()
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "curl -fsSL https://ollama.com/install.sh | sh" in captured.out
+
+    def test_binary_not_found_user_accepts_success(self, capsys):
+        """When user accepts and install succeeds, returns True."""
+        from llm_benchmark.preflight import check_ollama_installed
+
+        with (
+            patch("llm_benchmark.preflight.shutil.which", side_effect=[None, "/usr/local/bin/ollama"]),
+            patch("llm_benchmark.preflight.platform.system", return_value="Darwin"),
+            patch("builtins.input", return_value="y"),
+            patch("llm_benchmark.preflight.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0)
+            result = check_ollama_installed()
+
+        assert result is True
+        captured = capsys.readouterr()
+        assert "installed successfully" in captured.out.lower()
+
+    def test_binary_not_found_user_accepts_failure(self, capsys):
+        """When user accepts but install fails, returns False."""
+        from llm_benchmark.preflight import check_ollama_installed
+
+        with (
+            patch("llm_benchmark.preflight.shutil.which", side_effect=[None, None]),
+            patch("llm_benchmark.preflight.platform.system", return_value="Darwin"),
+            patch("builtins.input", return_value="y"),
+            patch("llm_benchmark.preflight.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=1)
+            result = check_ollama_installed()
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "failed" in captured.out.lower()
+
+    def test_preflight_calls_install_check_first(self):
+        """run_preflight_checks calls check_ollama_installed before connectivity check."""
+        from llm_benchmark.preflight import run_preflight_checks
+
+        with (
+            patch("llm_benchmark.preflight.check_ollama_installed", return_value=False) as mock_install,
+            patch("llm_benchmark.preflight.check_ollama_connectivity") as mock_conn,
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                run_preflight_checks()
+            assert exc_info.value.code == 1
+            mock_install.assert_called_once()
+            mock_conn.assert_not_called()
+
+
 class TestOllamaConnectivity:
     """Tests for check_ollama_connectivity()."""
 
@@ -139,7 +248,8 @@ class TestRunPreflightChecks:
         """Exits with code 1 when Ollama is unreachable."""
         from llm_benchmark.preflight import run_preflight_checks
 
-        with patch("llm_benchmark.preflight.check_ollama_connectivity", return_value=False):
+        with patch("llm_benchmark.preflight.check_ollama_installed", return_value=True), \
+             patch("llm_benchmark.preflight.check_ollama_connectivity", return_value=False):
             with pytest.raises(SystemExit) as exc_info:
                 run_preflight_checks()
             assert exc_info.value.code == 1
@@ -148,7 +258,8 @@ class TestRunPreflightChecks:
         """Exits with code 1 when no models are available."""
         from llm_benchmark.preflight import run_preflight_checks
 
-        with patch("llm_benchmark.preflight.check_ollama_connectivity", return_value=True), \
+        with patch("llm_benchmark.preflight.check_ollama_installed", return_value=True), \
+             patch("llm_benchmark.preflight.check_ollama_connectivity", return_value=True), \
              patch("llm_benchmark.preflight.check_available_models", return_value=[]):
             with pytest.raises(SystemExit) as exc_info:
                 run_preflight_checks()
@@ -161,7 +272,8 @@ class TestRunPreflightChecks:
         model = MagicMock()
         model.model = "test:1b"
 
-        with patch("llm_benchmark.preflight.check_ollama_connectivity", return_value=True), \
+        with patch("llm_benchmark.preflight.check_ollama_installed", return_value=True), \
+             patch("llm_benchmark.preflight.check_ollama_connectivity", return_value=True), \
              patch("llm_benchmark.preflight.check_available_models", return_value=[model]), \
              patch("llm_benchmark.preflight.check_ram_for_models") as mock_ram:
             result = run_preflight_checks(skip_checks=True)
