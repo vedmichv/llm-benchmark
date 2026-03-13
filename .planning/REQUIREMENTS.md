@@ -32,11 +32,11 @@
 
 ### UX (UX)
 
-- [ ] **UX-01**: Running tool with no arguments shows interactive menu (quick test / standard / full / custom)
-- [ ] **UX-02**: Quick test mode runs ~30 seconds: smallest model, 1 prompt, confirms "everything works"
-- [ ] **UX-03**: End of benchmark shows ranked model comparison with visual bar chart in terminal
+- [x] **UX-01**: Running tool with no arguments shows interactive menu (quick test / standard / full / custom)
+- [x] **UX-02**: Quick test mode runs ~30 seconds: smallest model, 1 prompt, confirms "everything works"
+- [x] **UX-03**: End of benchmark shows ranked model comparison with visual bar chart in terminal
 - [x] **UX-04**: All result files saved to results/ directory (not project root)
-- [ ] **UX-05**: Results include system info, model rankings, and recommendations for optimal config
+- [x] **UX-05**: Results include system info, model rankings, and recommendations for optimal config
 - [ ] **UX-06**: Shareable report format (Markdown with system info + rankings + individual runs)
 
 ### Code Quality (QUAL)
@@ -98,10 +98,10 @@
 | ANLZ-01 | Phase 3 | Complete |
 | ANLZ-02 | Phase 3 | Complete |
 | ANLZ-03 | Phase 3 | Complete |
-| UX-01 | Phase 4 | Pending |
-| UX-02 | Phase 4 | Pending |
-| UX-03 | Phase 4 | Pending |
-| UX-05 | Phase 4 | Pending |
+| UX-01 | Phase 4 | Complete |
+| UX-02 | Phase 4 | Complete |
+| UX-03 | Phase 4 | Complete |
+| UX-05 | Phase 4 | Complete |
 | UX-06 | Phase 4 | Pending |
 | QUAL-03 | Phase 4 | Pending |
 | QUAL-04 | Phase 4 | Pending |

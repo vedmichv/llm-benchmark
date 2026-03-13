@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 4 context gathered
-last_updated: "2026-03-13T12:14:19.291Z"
-last_activity: 2026-03-13 -- Plan 03-04 executed (CLI integration and exporters)
+status: in-progress
+stopped_at: Plan 04-01 complete (interactive menu and bar chart)
+last_updated: "2026-03-13T12:34:29Z"
+last_activity: 2026-03-13 -- Plan 04-01 executed (interactive menu and bar chart)
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 10
+  completed_plans: 10
   percent: 100
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Student clones repo, runs one command, gets clear answer about their hardware's LLM capabilities.
-**Current focus:** Phase 3: Concurrent Benchmarking
+**Current focus:** Phase 4: Student Experience
 
 ## Current Position
 
-Phase: 3 of 4 (Advanced Benchmarking) -- COMPLETE
-Plan: 4 of 4 in current phase
-Status: Plan 03-04 complete (CLI integration and exporters)
-Last activity: 2026-03-13 -- Plan 03-04 executed (CLI integration and exporters)
+Phase: 4 of 4 (Student Experience) -- IN PROGRESS
+Plan: 1 of ? in current phase
+Status: Plan 04-01 complete (interactive menu and bar chart)
+Last activity: 2026-03-13 -- Plan 04-01 executed (interactive menu and bar chart)
 
 Progress: [██████████] 100%
 
@@ -55,6 +55,7 @@ Progress: [██████████] 100%
 | Phase 03 P03 | 5min | 2 tasks | 3 files |
 | Phase 03 P02 | 5min | 1 tasks | 2 files |
 | Phase 03 P04 | 15min | 2 tasks | 2 files |
+| Phase 04 P01 | 3min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,11 @@ Recent decisions affecting current work:
 - [03-04]: Mutually exclusive argparse group for --concurrent and --sweep
 - [03-04]: Standard exports include mode="standard" for forward compatibility
 - [03-04]: Sweep exports use sweep_ prefix; concurrent exports use benchmark_ prefix
+- [04-01]: Menu uses input() loop with EOFError/KeyboardInterrupt for clean exit
+- [04-01]: Quick test sorts models by size, picks smallest for ~30s run
+- [04-01]: Bar chart uses Unicode block chars (full/empty) for universal terminal support
+- [04-01]: render_text_bar_chart returns plain string for Markdown embedding
+- [04-01]: Concurrent bar chart averages aggregate_throughput_ts across batches per model
 
 ### Pending Todos
 
@@ -103,6 +109,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-13T12:14:19.288Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-student-experience/04-CONTEXT.md
+Last session: 2026-03-13T12:34:29Z
+Stopped at: Plan 04-01 complete (interactive menu and bar chart)
+Resume file: .planning/phases/04-student-experience/04-01-SUMMARY.md
