@@ -6,9 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from llm_benchmark.models import SweepConfigResult, SweepModelResult
 from llm_benchmark.sweep import (
-    SweepConfigResult,
-    SweepModelResult,
     build_sweep_configs,
     get_model_layers,
     run_sweep_for_model,
