@@ -1,7 +1,8 @@
 """Result exporters: JSON, CSV, and Markdown writers.
 
 All functions create the output directory if it doesn't exist and use
-timestamped filenames (benchmark_YYYYMMDD_HHMMSS.{ext}).
+timestamped filenames (benchmark_YYYYMMDD_HHMMSS.{ext} for standard/concurrent,
+sweep_YYYYMMDD_HHMMSS.{ext} for sweep results).
 """
 
 from __future__ import annotations
@@ -73,6 +74,10 @@ def _result_to_dict(result) -> dict:
     return d
 
 
+# ---------------------------------------------------------------------------
+# Standard exports
+# ---------------------------------------------------------------------------
+
 def export_json(
     results: list[ModelSummary],
     system_info: SystemInfo | None = None,
@@ -93,6 +98,7 @@ def export_json(
 
     data = {
         "generated": datetime.now().isoformat(),
+        "mode": "standard",
         "system_info": system_info.model_dump() if system_info else None,
         "models": [],
     }
@@ -279,6 +285,438 @@ def export_markdown(
                 )
             else:
                 lines.append(f"   - Error: {run.error}")
+        lines.append("")
+
+    filepath.write_text("\n".join(lines))
+    return filepath
+
+
+# ---------------------------------------------------------------------------
+# Concurrent exports
+# ---------------------------------------------------------------------------
+
+def export_concurrent_json(
+    batch_results: list[list],
+    system_info: SystemInfo | None = None,
+    output_dir: str | Path = "results",
+) -> Path:
+    """Write concurrent benchmark results as JSON.
+
+    Args:
+        batch_results: List of lists of ConcurrentBatchResult (one inner list
+            per model).
+        system_info: Optional system information to include.
+        output_dir: Directory for output file (created if needed).
+
+    Returns:
+        Path to the written JSON file.
+    """
+    out_dir = _ensure_dir(output_dir)
+    filepath = out_dir / f"benchmark_{_timestamp()}.json"
+
+    # Determine worker count from first batch
+    num_workers = 0
+    for model_batches in batch_results:
+        if model_batches:
+            num_workers = model_batches[0].num_workers
+            break
+
+    data = {
+        "generated": datetime.now().isoformat(),
+        "mode": "concurrent",
+        "concurrent_workers": num_workers,
+        "system_info": system_info.model_dump() if system_info else None,
+        "models": [],
+    }
+
+    for model_batches in batch_results:
+        if not model_batches:
+            continue
+        model_name = model_batches[0].model
+        batches_data = []
+        for batch in model_batches:
+            batches_data.append({
+                "prompt": batch.prompt,
+                "num_workers": batch.num_workers,
+                "wall_time_s": round(batch.wall_time_s, 4),
+                "aggregate_throughput_ts": round(batch.aggregate_throughput_ts, 2),
+                "avg_request_throughput_ts": round(batch.avg_request_throughput_ts, 2),
+                "results": [_result_to_dict(r) for r in batch.results],
+            })
+        data["models"].append({
+            "model": model_name,
+            "batches": batches_data,
+        })
+
+    filepath.write_text(json.dumps(data, indent=2, default=str))
+    return filepath
+
+
+def export_concurrent_csv(
+    batch_results: list[list],
+    system_info: SystemInfo | None = None,
+    output_dir: str | Path = "results",
+) -> Path:
+    """Write concurrent benchmark results as CSV.
+
+    Args:
+        batch_results: List of lists of ConcurrentBatchResult.
+        system_info: Optional system information.
+        output_dir: Directory for output file.
+
+    Returns:
+        Path to the written CSV file.
+    """
+    out_dir = _ensure_dir(output_dir)
+    filepath = out_dir / f"benchmark_{_timestamp()}.csv"
+
+    with open(filepath, "w", newline="") as f:
+        writer = csv.writer(f)
+
+        # System info header rows
+        if system_info:
+            writer.writerow(["System Info"])
+            writer.writerow(["CPU", system_info.cpu])
+            writer.writerow(["RAM", f"{system_info.ram_gb:.1f} GB"])
+            writer.writerow(["GPU", system_info.gpu])
+            writer.writerow(["OS", system_info.os_name])
+            writer.writerow(["Ollama", system_info.ollama_version])
+            writer.writerow(["Mode", "concurrent"])
+            writer.writerow([])
+
+        # Column headers
+        writer.writerow([
+            "Model",
+            "Prompt",
+            "Workers",
+            "Wall Time (s)",
+            "Aggregate (t/s)",
+            "Avg Request (t/s)",
+        ])
+
+        for model_batches in batch_results:
+            for batch in model_batches:
+                writer.writerow([
+                    batch.model,
+                    batch.prompt[:60] + ("..." if len(batch.prompt) > 60 else ""),
+                    batch.num_workers,
+                    f"{batch.wall_time_s:.2f}",
+                    f"{batch.aggregate_throughput_ts:.2f}",
+                    f"{batch.avg_request_throughput_ts:.2f}",
+                ])
+
+    return filepath
+
+
+def export_concurrent_markdown(
+    batch_results: list[list],
+    system_info: SystemInfo | None = None,
+    output_dir: str | Path = "results",
+) -> Path:
+    """Write concurrent benchmark results as a Markdown report.
+
+    Args:
+        batch_results: List of lists of ConcurrentBatchResult.
+        system_info: Optional system information.
+        output_dir: Directory for output file.
+
+    Returns:
+        Path to the written Markdown file.
+    """
+    out_dir = _ensure_dir(output_dir)
+    filepath = out_dir / f"benchmark_{_timestamp()}.md"
+
+    # Determine worker count
+    num_workers = 0
+    for model_batches in batch_results:
+        if model_batches:
+            num_workers = model_batches[0].num_workers
+            break
+
+    lines: list[str] = []
+    lines.append("# LLM Concurrent Benchmark Results\n")
+    lines.append(
+        f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+    )
+    lines.append(f"**Mode:** Concurrent ({num_workers} workers)\n")
+
+    # System information
+    if system_info:
+        lines.append("## System Information\n")
+        lines.append(f"- **CPU:** {system_info.cpu}")
+        lines.append(f"- **RAM:** {system_info.ram_gb:.1f} GB")
+        lines.append(f"- **GPU:** {system_info.gpu}")
+        if system_info.gpu_vram_gb is not None:
+            lines.append(f"- **GPU VRAM:** {system_info.gpu_vram_gb:.1f} GB")
+        lines.append(f"- **OS:** {system_info.os_name}")
+        lines.append(f"- **Python:** {system_info.python_version}")
+        lines.append(f"- **Ollama:** {system_info.ollama_version}")
+        lines.append("")
+
+    lines.append("---\n")
+
+    # Summary table
+    lines.append("## Results\n")
+    lines.append(
+        "| Model | Prompt | Wall Time (s) | Aggregate (t/s) | Avg Request (t/s) |"
+    )
+    lines.append(
+        "|-------|--------|---------------|-----------------|-------------------|"
+    )
+
+    for model_batches in batch_results:
+        for batch in model_batches:
+            prompt_short = batch.prompt[:50] + ("..." if len(batch.prompt) > 50 else "")
+            lines.append(
+                f"| {batch.model} | {prompt_short} "
+                f"| {batch.wall_time_s:.2f} "
+                f"| {batch.aggregate_throughput_ts:.2f} "
+                f"| {batch.avg_request_throughput_ts:.2f} |"
+            )
+    lines.append("")
+
+    lines.append(
+        "> **Note:** Ollama may queue requests. Aggregate throughput shows "
+        "total work per wall-clock second."
+    )
+    lines.append("")
+
+    filepath.write_text("\n".join(lines))
+    return filepath
+
+
+# ---------------------------------------------------------------------------
+# Sweep exports
+# ---------------------------------------------------------------------------
+
+def export_sweep_json(
+    sweep_results: list,
+    system_info: SystemInfo | None = None,
+    output_dir: str | Path = "results",
+) -> Path:
+    """Write parameter sweep results as JSON.
+
+    Args:
+        sweep_results: List of SweepModelResult objects.
+        system_info: Optional system information.
+        output_dir: Directory for output file.
+
+    Returns:
+        Path to the written JSON file.
+    """
+    out_dir = _ensure_dir(output_dir)
+    filepath = out_dir / f"sweep_{_timestamp()}.json"
+
+    data = {
+        "generated": datetime.now().isoformat(),
+        "mode": "sweep",
+        "system_info": system_info.model_dump() if system_info else None,
+        "sweeps": [],
+    }
+
+    for sr in sweep_results:
+        best = None
+        if sr.best_config is not None:
+            best = {
+                "num_ctx": sr.best_config.num_ctx,
+                "num_gpu": sr.best_config.num_gpu,
+                "response_ts": round(sr.best_config.response_ts, 2),
+                "total_ts": round(sr.best_config.total_ts, 2),
+                "eval_count": sr.best_config.eval_count,
+                "total_duration_s": round(sr.best_config.total_duration_s, 4),
+            }
+
+        configs_data = []
+        for cfg in sr.configs:
+            configs_data.append({
+                "num_ctx": cfg.num_ctx,
+                "num_gpu": cfg.num_gpu,
+                "response_ts": round(cfg.response_ts, 2),
+                "total_ts": round(cfg.total_ts, 2),
+                "eval_count": cfg.eval_count,
+                "total_duration_s": round(cfg.total_duration_s, 4),
+                "success": cfg.success,
+                "error": cfg.error,
+            })
+
+        data["sweeps"].append({
+            "model": sr.model,
+            "best_config": best,
+            "configs": configs_data,
+        })
+
+    filepath.write_text(json.dumps(data, indent=2, default=str))
+    return filepath
+
+
+def export_sweep_csv(
+    sweep_results: list,
+    system_info: SystemInfo | None = None,
+    output_dir: str | Path = "results",
+) -> Path:
+    """Write parameter sweep results as CSV.
+
+    Args:
+        sweep_results: List of SweepModelResult objects.
+        system_info: Optional system information.
+        output_dir: Directory for output file.
+
+    Returns:
+        Path to the written CSV file.
+    """
+    out_dir = _ensure_dir(output_dir)
+    filepath = out_dir / f"sweep_{_timestamp()}.csv"
+
+    with open(filepath, "w", newline="") as f:
+        writer = csv.writer(f)
+
+        # System info header rows
+        if system_info:
+            writer.writerow(["System Info"])
+            writer.writerow(["CPU", system_info.cpu])
+            writer.writerow(["RAM", f"{system_info.ram_gb:.1f} GB"])
+            writer.writerow(["GPU", system_info.gpu])
+            writer.writerow(["OS", system_info.os_name])
+            writer.writerow(["Ollama", system_info.ollama_version])
+            writer.writerow(["Mode", "sweep"])
+            writer.writerow([])
+
+        # Column headers
+        writer.writerow([
+            "Model",
+            "num_ctx",
+            "num_gpu",
+            "Response (t/s)",
+            "Total (t/s)",
+            "Tokens",
+            "Time (s)",
+            "Best?",
+        ])
+
+        for sr in sweep_results:
+            for cfg in sr.configs:
+                is_best = (
+                    sr.best_config is not None
+                    and cfg.num_ctx == sr.best_config.num_ctx
+                    and cfg.num_gpu == sr.best_config.num_gpu
+                    and cfg.success
+                )
+                if cfg.success:
+                    writer.writerow([
+                        sr.model,
+                        cfg.num_ctx,
+                        cfg.num_gpu,
+                        f"{cfg.response_ts:.2f}",
+                        f"{cfg.total_ts:.2f}",
+                        cfg.eval_count,
+                        f"{cfg.total_duration_s:.2f}",
+                        "Yes" if is_best else "No",
+                    ])
+                else:
+                    writer.writerow([
+                        sr.model,
+                        cfg.num_ctx,
+                        cfg.num_gpu,
+                        "FAILED",
+                        "FAILED",
+                        "-",
+                        "-",
+                        "No",
+                    ])
+
+    return filepath
+
+
+def export_sweep_markdown(
+    sweep_results: list,
+    system_info: SystemInfo | None = None,
+    output_dir: str | Path = "results",
+) -> Path:
+    """Write parameter sweep results as a Markdown report.
+
+    Args:
+        sweep_results: List of SweepModelResult objects.
+        system_info: Optional system information.
+        output_dir: Directory for output file.
+
+    Returns:
+        Path to the written Markdown file.
+    """
+    out_dir = _ensure_dir(output_dir)
+    filepath = out_dir / f"sweep_{_timestamp()}.md"
+
+    lines: list[str] = []
+    lines.append("# LLM Parameter Sweep Results\n")
+    lines.append(
+        f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+    )
+    lines.append("**Mode:** Parameter Sweep\n")
+
+    # System information
+    if system_info:
+        lines.append("## System Information\n")
+        lines.append(f"- **CPU:** {system_info.cpu}")
+        lines.append(f"- **RAM:** {system_info.ram_gb:.1f} GB")
+        lines.append(f"- **GPU:** {system_info.gpu}")
+        if system_info.gpu_vram_gb is not None:
+            lines.append(f"- **GPU VRAM:** {system_info.gpu_vram_gb:.1f} GB")
+        lines.append(f"- **OS:** {system_info.os_name}")
+        lines.append(f"- **Python:** {system_info.python_version}")
+        lines.append(f"- **Ollama:** {system_info.ollama_version}")
+        lines.append("")
+
+    lines.append("---\n")
+
+    # Per-model sweep tables
+    for sr in sweep_results:
+        lines.append(f"## {sr.model}\n")
+
+        # Sort configs by response_ts descending (successful first)
+        sorted_configs = sorted(
+            sr.configs,
+            key=lambda c: (c.success, c.response_ts),
+            reverse=True,
+        )
+
+        lines.append(
+            "| Rank | num_ctx | num_gpu | Response (t/s) | Total (t/s) "
+            "| Tokens | Time (s) | Note |"
+        )
+        lines.append(
+            "|------|---------|---------|----------------|-------------|"
+            "--------|----------|------|"
+        )
+
+        for rank, cfg in enumerate(sorted_configs, 1):
+            is_best = (
+                sr.best_config is not None
+                and cfg.num_ctx == sr.best_config.num_ctx
+                and cfg.num_gpu == sr.best_config.num_gpu
+                and cfg.success
+            )
+            note = "**Recommended**" if is_best else ""
+
+            if cfg.success:
+                if is_best:
+                    lines.append(
+                        f"| **{rank}** | **{cfg.num_ctx}** | **{cfg.num_gpu}** "
+                        f"| **{cfg.response_ts:.1f}** | **{cfg.total_ts:.1f}** "
+                        f"| **{cfg.eval_count}** | **{cfg.total_duration_s:.2f}** "
+                        f"| {note} |"
+                    )
+                else:
+                    lines.append(
+                        f"| {rank} | {cfg.num_ctx} | {cfg.num_gpu} "
+                        f"| {cfg.response_ts:.1f} | {cfg.total_ts:.1f} "
+                        f"| {cfg.eval_count} | {cfg.total_duration_s:.2f} "
+                        f"| {note} |"
+                    )
+            else:
+                lines.append(
+                    f"| {rank} | {cfg.num_ctx} | {cfg.num_gpu} "
+                    f"| FAILED | FAILED | - | - | {cfg.error or ''} |"
+                )
+
         lines.append("")
 
     filepath.write_text("\n".join(lines))
