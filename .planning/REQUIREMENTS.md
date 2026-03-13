@@ -37,7 +37,7 @@
 - [x] **UX-03**: End of benchmark shows ranked model comparison with visual bar chart in terminal
 - [x] **UX-04**: All result files saved to results/ directory (not project root)
 - [x] **UX-05**: Results include system info, model rankings, and recommendations for optimal config
-- [ ] **UX-06**: Shareable report format (Markdown with system info + rankings + individual runs)
+- [x] **UX-06**: Shareable report format (Markdown with system info + rankings + individual runs)
 
 ### Code Quality (QUAL)
 
@@ -102,7 +102,7 @@
 | UX-02 | Phase 4 | Complete |
 | UX-03 | Phase 4 | Complete |
 | UX-05 | Phase 4 | Complete |
-| UX-06 | Phase 4 | Pending |
+| UX-06 | Phase 4 | Complete |
 | QUAL-03 | Phase 4 | Pending |
 | QUAL-04 | Phase 4 | Pending |
 
