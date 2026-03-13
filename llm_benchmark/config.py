@@ -2,7 +2,7 @@
 
 from rich.console import Console
 
-_console = Console()
+_console = Console(highlight=False)
 _debug: bool = False
 
 # Constants
