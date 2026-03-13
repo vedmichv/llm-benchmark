@@ -22,6 +22,7 @@ RAM_TIER_THRESHOLDS: dict[str, int] = {
     "medium": 16,
     "large": 36,
     "xl": 64,
+    "xxl": 100,
 }
 
 # Curated model list ordered by tier, then roughly by size.
@@ -46,15 +47,20 @@ TIERED_MODELS: list[dict[str, str]] = [
     {"name": "qwen3.5:35b", "size_label": "35B", "tier": "xl", "description": "Qwen 3.5 large (arena top-20)"},
     {"name": "llama3.3:70b", "size_label": "70B", "tier": "xl", "description": "Meta flagship 70B model"},
     {"name": "qwen3:32b", "size_label": "32B", "tier": "xl", "description": "Qwen 3 thinking model"},
+    # --- xxl (100 GB+) ---
+    {"name": "qwen3.5:122b", "size_label": "122B", "tier": "xxl", "description": "Qwen 3.5 MoE (arena #8, 81 GB)"},
+    {"name": "llama3.1:70b", "size_label": "70B", "tier": "xxl", "description": "Llama 3.1 full-precision 70B"},
+    {"name": "deepseek-r1:70b", "size_label": "70B", "tier": "xxl", "description": "DeepSeek reasoning 70B"},
 ]
 
 # Tier display order (for grouped UI output).
-_TIER_ORDER = ["small", "medium", "large", "xl"]
+_TIER_ORDER = ["small", "medium", "large", "xl", "xxl"]
 _TIER_LABELS = {
     "small": "Small models (any hardware)",
     "medium": "Medium models (16 GB+ RAM)",
     "large": "Large models (36 GB+ RAM)",
     "xl": "Extra-large models (64 GB+ RAM)",
+    "xxl": "Massive models (100 GB+ RAM)",
 }
 
 
@@ -116,16 +122,20 @@ def offer_model_downloads(installed_models: list, *, force: bool = False) -> lis
     list
         Updated model list (may include newly downloaded models).
     """
-    from llm_benchmark.system import _get_ram_gb
+    from llm_benchmark.system import _get_gpu_info, _get_ram_gb
 
     console = get_console()
 
-    # Detect RAM and build recommendations
+    # Detect total available memory (RAM + VRAM for discrete GPU, just RAM for unified)
     ram_gb = _get_ram_gb()
-    if ram_gb <= 0:
+    _, vram_gb = _get_gpu_info()
+    # On Apple Silicon vram_gb is None (unified memory = RAM already includes GPU)
+    # On discrete GPU systems, sum RAM + VRAM for total model capacity
+    total_memory_gb = ram_gb + (vram_gb or 0)
+    if total_memory_gb <= 0:
         return installed_models
 
-    recommended = get_recommended_models(ram_gb)
+    recommended = get_recommended_models(total_memory_gb)
     installed_names = [m.model for m in installed_models]
 
     if force:
@@ -164,11 +174,13 @@ def offer_model_downloads(installed_models: list, *, force: bool = False) -> lis
         is_installed = model["name"] in installed_set
         if is_installed:
             console.print(
-                f"    {number}. {model['name']}  ({model['size_label']}) - {model['description']} [green][installed][/green]"
+                f"    {number}. {model['name']}  ([green]{model['size_label']}[/green]) - {model['description']} [green]\\[installed][/green]",
+                highlight=False,
             )
         else:
             console.print(
-                f"    {number}. {model['name']}  ({model['size_label']}) - {model['description']}"
+                f"    {number}. {model['name']}  ([green]{model['size_label']}[/green]) - {model['description']}",
+                highlight=False,
             )
         number_map[number] = model
         number += 1
