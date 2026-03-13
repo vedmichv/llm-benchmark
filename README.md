@@ -1,649 +1,311 @@
-# LLM Benchmark Tool
+# LLM Benchmark
 
-Comprehensive benchmarking tool for Large Language Models (LLMs) running locally via [Ollama](https://ollama.com/). Measures token throughput (tokens/second), response quality, and model performance across diverse cognitive tasks.
+Measure how fast Large Language Models run on **your** hardware. Uses [Ollama](https://ollama.com/) to benchmark token throughput (tokens/second) across models, so you know which one works best for your setup.
 
-## 🎯 Features
-
-- **Automated Performance Testing**: Benchmark multiple models with configurable prompts
-- **Comprehensive Metrics**: Token throughput, response times, load times, and more
-- **System Information Collection**: Auto-captures GPU, CPU, RAM, OS details in results
-- **Multiple Export Formats**: Markdown, JSON, and CSV outputs for analysis
-- **Results Comparison Tool**: Compare benchmarks across runs to track improvements
-- **Diverse Test Suite**: 5 optimized prompts testing technical knowledge, logic, system design, and analytical thinking
-- **Model Management**: Automatic model offloading between tests for fair comparisons
-- **Concurrent Run Protection**: Lock files prevent simultaneous benchmarks
-- **Progress Tracking**: Real-time progress indicators and streaming responses
-- **Timestamped Results**: All results saved with timestamps to prevent overwriting
-- **Markdown Reports**: Beautiful, detailed results in markdown format
-- **Timeout Protection**: 10-minute default timeout with smart handling
-- **Ollama Log Diagnostics**: Automatic log capture on failures
-
-## 📊 What Gets Tested
-
-The benchmark includes 5 optimized prompts that test:
-
-| Category | Test Type | What It Measures |
-|----------|-----------|------------------|
-| 🔧 Technical Knowledge | Kubernetes StatefulSets vs Deployments | Domain expertise, infrastructure understanding |
-| 👥 Technical Comparison | DevOps vs SRE Roles | Comparative analysis, organizational concepts |
-| 🎯 Logical Reasoning | 12 Balls Puzzle | Pure logic, algorithmic thinking |
-| 🏗️ System Design | URL Shortener Architecture | Architecture skills, scalability thinking |
-| 💻 Analytical Thinking | Language Performance Analysis | Technical depth, comparative analysis |
-
-## 🚀 Quick Start (Single Command)
-
-**NEW: Cross-platform launcher** - Works on Windows, Linux, and macOS!
-
-```bash
-# Clone the repository
-git clone https://github.com/vedmichv/llm-benchmark.git
-cd llm-benchmark
-
-# Run with single command (auto-installs dependencies)
-python run.py
+```
+uv run python -m llm_benchmark
 ```
 
-The launcher will automatically:
-- Check Python and Ollama installation
-- Create virtual environment
-- Install dependencies
-- Run the benchmark
+No CLI knowledge needed — an interactive menu guides you through everything.
 
-### 🪟 Windows/WSL Users
+```
+LLM Benchmark
 
-If you're running on Windows with WSL, see the **[Windows Setup Guide](WINDOWS_SETUP.md)** for:
-- Complete step-by-step setup instructions
-- Ollama configuration for WSL access
-- Firewall and networking setup
-- Troubleshooting common issues
-- Performance expectations
+Apple M3 Max | 64 GB RAM | Apple M3 Max (integrated GPU) | Ollama 0.17.7
 
-**Quick Windows Setup:**
-```bash
-# 1. Configure Ollama on Windows (PowerShell Admin):
-[System.Environment]::SetEnvironmentVariable('OLLAMA_HOST', '0.0.0.0:11434', 'User')
-New-NetFirewallRule -DisplayName "Ollama WSL Access" -Direction Inbound -LocalPort 11434 -Protocol TCP -Action Allow
+  Download recommended models? (y/N): y
 
-# 2. In WSL, set environment variable:
-export OLLAMA_HOST="http://$(ip route show | grep -i default | awk '{ print $3}'):11434"
+  Small models (any hardware)
+    1. llama3.2:1b  (1B) - Fast general-purpose chat
+    2. qwen2.5:0.5b (0.5B) - Smallest available model
+  Medium models (16 GB+ RAM)
+    3. llama3.2:3b  (3B) - Balanced speed and quality
+    4. gemma3:4b    (4B) - Google's efficient model
 
-# 3. Run the benchmark:
-cd /tmp/llm-benchmark
-python3 run.py
+  Enter model numbers to download (e.g. 1,3,5) or 'all': 1,3
+
+    1. Quick test (~30 seconds)
+    2. Standard benchmark
+    3. Full benchmark
+    4. Custom
+
+  Select mode [1-4]:
 ```
 
-See [WINDOWS_SETUP.md](WINDOWS_SETUP.md) for complete details.
+## How It Works
 
-**Platform-specific commands:**
-- **Linux/macOS**: `./run.sh` or `python3 run.py`
-- **Windows (CMD)**: `run.bat` or `python run.py`
-- **Windows (PowerShell)**: `.\run.ps1` or `python run.py`
+```
+┌─────────────────────────────────────────────────────────┐
+│                    llm-benchmark                        │
+│                                                         │
+│  1. Preflight                                           │
+│     ├─ Ollama installed? (offers auto-install if not)   │
+│     ├─ Ollama running?                                  │
+│     ├─ Models available? (recommends by your RAM)       │
+│     └─ RAM check (warns if model may not fit)           │
+│                                                         │
+│  2. Benchmark                                           │
+│     ├─ Send prompts to each model via Ollama API        │
+│     ├─ Measure: prompt eval, response gen, total time   │
+│     ├─ Multiple runs per prompt for stable averages     │
+│     └─ Unload model between tests (fair comparison)     │
+│                                                         │
+│  3. Results                                             │
+│     ├─ Terminal: ranked bar chart + recommendation      │
+│     └─ Files: JSON + CSV + Markdown (in results/)      │
+│                                                         │
+│  Model Rankings                                         │
+│                                                         │
+│    qwen3:1.7b   ██████████████████████████████  212 t/s │
+│    llama3.2:3b  ████████████████████            142 t/s │
+│    gemma3:4b    ███████████████                 108 t/s │
+│    mistral:7b   █████████████                    91 t/s │
+│                                                         │
+│    Best for your setup: qwen3:1.7b (212 t/s)           │
+└─────────────────────────────────────────────────────────┘
+```
 
-### Prerequisites
+## Quick Start
 
-- **Operating System**: Windows 10+, Linux (Ubuntu 20.04+), or macOS 11+
-- **Python**: 3.8 or higher
-- **Ollama**: Install from [ollama.com](https://ollama.com/)
-- **RAM**: 8GB minimum (16GB+ recommended for larger models)
-- **GPU**: Optional but highly recommended (NVIDIA GPU with CUDA support)
+### 1. Install prerequisites
 
----
+**Python 3.12+** and **uv** (recommended):
 
-## 📦 Installation
-
-### Step 1: Install Ollama
-
-Ollama is required to run LLMs locally.
-
-**Linux:**
 ```bash
+# Install uv (Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**Ollama** — the tool will offer to install it automatically on first run. Or install manually:
+
+```bash
+# macOS / Linux
 curl -fsSL https://ollama.com/install.sh | sh
-# Start service
-sudo systemctl start ollama
-sudo systemctl enable ollama  # Start on boot
+
+# Windows (PowerShell)
+irm https://ollama.com/install.ps1 | iex
 ```
 
-**macOS:**
-```bash
-# Download from https://ollama.com/download
-# Or use Homebrew:
-brew install ollama
-ollama serve  # Run in terminal
-```
-
-**Windows:**
-- Download installer from [ollama.com/download](https://ollama.com/download)
-- Run the installer
-- Ollama will start automatically
-
-**Verify installation:**
-```bash
-ollama --version
-```
-
-### Step 2: Download Models
-
-Download the specific models used in our benchmarks:
+### 2. Clone and run
 
 ```bash
-# Download all test models (this will take time - ~45GB total)
-ollama pull qwen3-coder:30b          # 18GB - Fastest model
-ollama pull gpt-oss:20b              # 13GB - Most detailed
-ollama pull deepseek-r1:8b           # 5.2GB - Balanced performance
-ollama pull deepseek-r1:8b-0528-qwen3-q8_0  # 8.9GB - High precision
-```
-
-**Quick option (download smallest model only):**
-```bash
-ollama pull deepseek-r1:8b           # 5.2GB - Good for testing
-```
-
-**Verify models are downloaded:**
-```bash
-ollama list
-```
-
-Expected output:
-```
-NAME                              ID              SIZE      MODIFIED
-deepseek-r1:8b-0528-qwen3-q8_0    cade62fd2850    8.9 GB    X minutes ago
-deepseek-r1:8b                    6995872bfe4c    5.2 GB    X minutes ago
-gpt-oss:20b                       17052f91a42e    13 GB     X minutes ago
-qwen3-coder:30b                   06c1097efce0    18 GB     X minutes ago
-```
-
-### Step 3: Clone and Run
-
-```bash
-# Clone the repository
 git clone https://github.com/vedmichv/llm-benchmark.git
 cd llm-benchmark
-
-# Run with the cross-platform launcher (automatically installs dependencies)
-python run.py
+uv sync
+uv run python -m llm_benchmark
 ```
 
-The launcher (`run.py`) automatically handles:
-- Virtual environment creation
-- Dependency installation
-- Platform detection
+That's it. The interactive menu will:
+- Check Ollama is installed and running
+- Recommend models based on your RAM and offer to download them
+- Let you pick a benchmark mode
+- Show results with a ranked bar chart
 
-**Manual installation (if needed):**
-```bash
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# or
-.venv\Scripts\activate  # Windows
+### 3. Check your results
 
-# Install dependencies
-pip install -r requirements.txt
+After a benchmark completes, results are saved to `results/`:
+
+```
+results/
+  benchmark_20260313_140317.json   # Machine-readable data
+  benchmark_20260313_140317.csv    # For spreadsheets
+  benchmark_20260313_140317.md     # Shareable report
 ```
 
-### Step 4: Verify Setup
+The Markdown report includes system info, rankings with bar chart, and a recommendation — paste it into GitHub, Discord, or Slack.
 
-Test that everything is working:
+## Benchmark Modes
 
-```bash
-# Using the launcher (recommended)
-python run.py --models "deepseek-r1:8b" --runs-per-prompt 1 --prompts "Hello, how are you?"
-
-# Or run directly
-python3 extended_benchmark.py --models "deepseek-r1:8b" --runs-per-prompt 1 --prompts "Hello, how are you?"
-```
-
-If you see output with benchmark results, you're ready to go! 🎉
-
----
-
-### (Optional) Setup Passwordless Sudo
-
-The benchmark needs sudo to offload models between tests. You have two options:
-
-**Option A: Enter password once per session** (Default)
-- Script caches sudo credentials at start
-- Prompts for password once, then auto-renews
-- No configuration needed
-
-**Option B: Configure passwordless sudo** (Recommended for automation)
-```bash
-# Run the setup script
-./setup_passwordless_sudo.sh
-
-# This creates /etc/sudoers.d/ollama-benchmark
-# Allows passwordless: pkill, journalctl, pgrep
-```
-
-**Option C: Skip offloading** (Fast but less accurate)
-```bash
-# Run without model offloading (no sudo needed)
-python run.py --no-offload
-```
-
----
-
-## 🎮 Usage
-
-### Basic Benchmark (All Models, All Prompts)
+### Interactive menu (no-args)
 
 ```bash
-# Using the launcher (recommended - handles environment automatically)
-python run.py
-
-# Or run directly
-python3 extended_benchmark.py
+uv run python -m llm_benchmark
 ```
 
-This runs the full benchmark suite:
-- **Models**: All 4 downloaded models
-- **Prompts**: All 5 default prompts
-- **Runs**: 2 per prompt per model (40 total runs)
-- **Output**: `benchmark_results_YYYYMMDD_HHMMSS.md`
-- **Duration**: ~40-50 minutes
+| Mode | Prompts | Runs | Time estimate | Best for |
+|------|---------|------|---------------|----------|
+| Quick test | 1 short | 1 | ~30 seconds | Verify everything works |
+| Standard | 5 medium | 2 | ~10-20 min | Normal comparison |
+| Full | 11 large | 3 | ~30-60 min | Thorough analysis |
+| Custom | You pick | You pick | Varies | Specific needs |
 
-### Quick Test (Single Model)
+### CLI flags (for power users)
 
 ```bash
-python run.py --models "qwen3-coder:30b" --runs-per-prompt 1
+# Standard benchmark (same as menu option 2)
+uv run python -m llm_benchmark run
+
+# Specific prompt set and runs
+uv run python -m llm_benchmark run --prompt-set large --runs-per-prompt 3
+
+# Skip certain models
+uv run python -m llm_benchmark run --skip-models llama3.2:1b
+
+# Custom prompts
+uv run python -m llm_benchmark run --prompts "Explain Docker" "What is Kubernetes?"
+
+# Verbose mode (stream responses)
+uv run python -m llm_benchmark run --verbose
 ```
 
-**Result**: Tests fastest model with 5 prompts (1 run each) in ~5-8 minutes
+### Advanced modes
 
-### Test Specific Models
+**Concurrent benchmarking** — test throughput under parallel load:
 
 ```bash
-# Test only fast models
-python run.py --models "qwen3-coder:30b" "gpt-oss:20b"
+# Auto-detect optimal concurrency based on hardware
+uv run python -m llm_benchmark run --concurrent
 
-# Skip slow models
-python run.py --skip-models "deepseek-r1:8b-0528-qwen3-q8_0"
+# Or specify worker count
+uv run python -m llm_benchmark run --concurrent 4
 ```
 
-### Prompt Sets (Small, Medium, Large)
-
-Choose from predefined prompt packages:
+**Parameter sweep** — find the best `num_ctx` / `num_gpu` config per model:
 
 ```bash
-# Small set - Quick test (3 prompts, ~5-10 minutes)
-python run.py --prompt-set small
-
-# Medium set - Standard test (5 prompts, ~15-20 minutes) [DEFAULT]
-python run.py --prompt-set medium
-
-# Large set - Comprehensive test (11 prompts, ~40-60 minutes)
-python run.py --prompt-set large
+uv run python -m llm_benchmark run --sweep
 ```
 
-**Prompt Set Details:**
-- **Small** (3 prompts): Quick tests for basic functionality and speed
-- **Medium** (5 prompts): Standard tests covering technical knowledge, logic, system design
-- **Large** (11 prompts): Comprehensive tests including distributed systems, caching, search engines, and more
-
-### Custom Prompts
-
-```bash
-# Override prompt sets with your own prompts
-python run.py \
-  --prompts "Explain Docker containers" "What is Kubernetes?" \
-  --runs-per-prompt 2
-```
-
-### Export to JSON/CSV
-
-```bash
-# Export to JSON for data analysis
-python3 extended_benchmark.py --export-json results.json
-
-# Export to CSV for Excel/spreadsheets
-python3 extended_benchmark.py --export-csv results.csv
-
-# Export to all formats
-python3 extended_benchmark.py \
-  --export-json results.json \
-  --export-csv results.csv
-```
-
-**Exports include:**
-- System information (GPU, CPU, RAM, OS)
-- All performance metrics
-- Individual run details
-- Timestamps
-
-### Compare Results
-
-Compare benchmark results from different runs to track improvements:
+### Other commands
 
 ```bash
 # Compare two benchmark runs
-python3 compare_results.py \
-  benchmark_results_20251026_140000.json \
-  benchmark_results_20251026_160000.json \
-  --labels "Before" "After"
+uv run python -m llm_benchmark compare results/run1.json results/run2.json
+
+# Show system information
+uv run python -m llm_benchmark info
+
+# Analyze and rank existing results
+uv run python -m llm_benchmark analyze results/benchmark.json
 ```
 
-**Comparison shows:**
-- Performance differences (absolute & percentage)
-- System configuration changes
-- Per-model improvements
-- Summary statistics
+## Understanding Results
 
-### Advanced Options
+### Key metrics
 
-```bash
-python3 extended_benchmark.py \
-  --models "qwen3-coder:30b" \
-  --runs-per-prompt 3 \
-  --timeout 600 \
-  --output my_custom_results.md \
-  --no-offload
-```
+| Metric | What it means |
+|--------|--------------|
+| **Prompt Eval (t/s)** | Speed processing your input (higher = better) |
+| **Response (t/s)** | Speed generating output — **the most important metric** |
+| **Total (t/s)** | Combined throughput |
 
-**Options:**
-- `--models`: Specific models to test (space-separated)
-- `--skip-models`: Models to exclude (space-separated)
-- `--prompt-set`: Choose prompt package: small (3), medium (5), large (11) [default: medium]
-- `--prompts`: Custom prompts (space-separated, use quotes) - overrides --prompt-set
-- `--runs-per-prompt`: Number of times to run each prompt (default: 2)
-- `--timeout`: Timeout per run in seconds (default: 600 / 10 min)
-- `--output`: Custom output filename (default: timestamped)
-- `--no-timestamp`: Disable timestamp in output filename
-- `--no-offload`: Skip model offloading (faster but less accurate)
-- `--force`: Skip all interactive prompts (for automation)
-- `--export-json`: Export results to JSON file
-- `--export-csv`: Export results to CSV file
+### Performance tiers
 
----
+| Response t/s | Rating | Experience |
+|-------------|--------|------------|
+| 150+ | Excellent | Near-instant streaming |
+| 100-150 | Good | Comfortable reading speed |
+| 50-100 | Moderate | Noticeable delay |
+| < 50 | Slow | Significant wait |
 
-## 📖 Understanding Results
-
-### Output Files
-
-After running a benchmark, you'll get:
-
-1. **`benchmark_results_YYYYMMDD_HHMMSS.md`** - Main results file
-   - System information (GPU, CPU, RAM, OS)
-   - Summary table comparing all models
-   - Detailed per-model statistics
-   - Individual run breakdowns
-
-2. **JSON/CSV exports** (optional)
-   - Machine-readable formats for analysis
-   - Complete data with system info
-   - Easy import into Excel, Python, R
-
-3. **Log file (if using `tee`)** - Complete execution log
-   - Real-time progress
-   - Model responses (truncated)
-   - Timing information
-
-### Reading the Results
-
-Example output structure:
+### Example Markdown report
 
 ```markdown
+# LLM Benchmark Results
+
+**Generated:** 2026-03-13 14:03:17 | **Models:** 4 | **Mode:** Standard
+
+**System:** Apple M3 Max, 64.0 GB RAM, Apple M3 Max (integrated GPU), Darwin 25.3.0
+
+## Rankings
+
+  qwen3:1.7b   ██████████████████████████████   212.8 t/s
+  llama3.2:3b  ████████████████████             142.1 t/s
+  gemma3:4b    ███████████████                  108.3 t/s
+  mistral:7b   █████████████                     91.7 t/s
+
+  Best for your setup: qwen3:1.7b (212.8 t/s) -- fastest response generation
+
 ## Summary
 
-| Model | Prompt Eval (t/s) | Response (t/s) | Total (t/s) | Avg Prompt Tokens | Avg Response Tokens |
-|-------|-------------------|----------------|-------------|-------------------|---------------------|
-| qwen3-coder:30b | 2584 | 157.07 | 162.05 | 42 | 1423 |
-| gpt-oss:20b | 7441 | 140.59 | 144.99 | 98 | 3289 |
+| Model | Prompt Eval (t/s) | Response (t/s) | Total (t/s) |
+|-------|-------------------|----------------|-------------|
+| qwen3:1.7b | 7129.93 | 212.81 | 227.84 |
+| llama3.2:3b | 5841.22 | 142.10 | 155.32 |
+| ...
 ```
 
-**Key Metrics Explained:**
+## Model Recommendations by RAM
 
-- **Prompt Eval (t/s)**: How fast the model processes input tokens
-- **Response (t/s)**: How fast the model generates output tokens ⭐ **Most important**
-- **Total (t/s)**: Overall throughput (prompt + response)
-- **Avg Prompt Tokens**: Average input length across tests
-- **Avg Response Tokens**: Average output length (indicates verbosity)
+The tool auto-recommends models based on your hardware. Here's the full tier list:
 
-**Performance Interpretation:**
+| RAM | Models you can comfortably run |
+|-----|-------------------------------|
+| Any | `llama3.2:1b`, `qwen2.5:0.5b`, `phi4-mini` (3.8B) |
+| 16 GB+ | `llama3.2:3b`, `qwen2.5:7b`, `gemma3:4b`, `phi4` (14B) |
+| 36 GB+ | `llama3.1:8b`, `qwen2.5:14b`, `gemma3:12b`, `phi4:14b` |
+| 64 GB+ | `llama3.3:70b`, `qwen2.5:32b` |
 
-| Speed (t/s) | Rating | User Experience |
-|-------------|--------|-----------------|
-| 150+ | ⚡ Excellent | Nearly instant, smooth streaming |
-| 100-150 | ✅ Good | Fast, comfortable reading speed |
-| 50-100 | 🟡 Moderate | Noticeable delay but usable |
-| < 50 | 🔴 Slow | Significant wait times |
-
-### Example Analysis
-
-From our test results:
-
-**Best Overall**: `qwen3-coder:30b` (157 t/s)
-- Fastest response generation
-- Concise but complete answers
-- Best for: Quick responses, coding tasks
-
-**Most Detailed**: `gpt-oss:20b` (141 t/s, 3289 tokens avg)
-- Comprehensive explanations
-- Good balance of speed and detail
-- Best for: In-depth analysis, learning
-
-**Most Efficient**: `deepseek-r1:8b` (111 t/s)
-- Best tokens/parameter ratio
-- Lower memory usage
-- Best for: Resource-constrained systems
-
----
-
-## 🔧 Troubleshooting
-
-### Ollama Not Running
-
-**Error**: `Connection refused` or `Could not connect to Ollama`
-
-**Solution**:
-```bash
-# Check if Ollama is running
-ps aux | grep ollama
-
-# Start Ollama
-ollama serve &
-
-# Or restart service
-sudo systemctl restart ollama
-```
-
-### Model Not Found
-
-**Error**: `model 'xxx' not found`
-
-**Solution**:
-```bash
-# List available models
-ollama list
-
-# Download missing model
-ollama pull <model-name>
-```
-
-### Out of Memory
-
-**Error**: System freezes or OOM killer terminates process
-
-**Solutions**:
-1. **Test smaller models first**:
-   ```bash
-   python3 extended_benchmark.py --models "deepseek-r1:8b"
-   ```
-
-2. **Reduce concurrent runs**:
-   ```bash
-   python3 extended_benchmark.py --runs-per-prompt 1
-   ```
-
-3. **Enable model offloading** (default behavior):
-   - Automatically unloads models between tests
-   - Slower but uses less memory
-
-4. **Close other applications** to free RAM
-
-### Timeout Issues
-
-**Error**: Benchmarks timing out on slow hardware
-
-**Solution**:
-```bash
-# Increase timeout to 10 minutes
-python3 extended_benchmark.py --timeout 600
-
-# Or test with shorter prompts
-python3 extended_benchmark.py --prompts "Hello" "What is AI?"
-```
-
-### Permission Errors
-
-**Error**: `Permission denied` when installing dependencies
-
-**Solution**:
-```bash
-# Use virtual environment (recommended)
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# Or install system-wide (not recommended)
-pip3 install --break-system-packages -r requirements.txt
-```
-
----
-
-## 📈 Benchmark Tips
-
-### For Accurate Results
-
-1. **Close other applications**: Free up system resources
-2. **Use model offloading**: Enabled by default, don't use `--no-offload`
-3. **Run multiple times**: Use `--runs-per-prompt 3` for better averages
-4. **Test at consistent times**: Avoid thermal throttling from prolonged use
-
-### For Quick Testing
-
-1. **Single model**: `--models "qwen3-coder:30b"`
-2. **One run per prompt**: `--runs-per-prompt 1`
-3. **Fewer prompts**: `--prompts "Test prompt 1" "Test prompt 2"`
-4. **Disable offloading**: `--no-offload` (if testing single model)
-
-### For Comprehensive Analysis
-
-1. **All models**: Don't specify `--models`
-2. **Multiple runs**: `--runs-per-prompt 3`
-3. **All prompts**: Use default (or add more with `--prompts`)
-4. **Enable offloading**: Default behavior
-
----
-
-## 🎓 Example Workflows
-
-### Workflow 1: Quick Performance Check
+Download models manually:
 
 ```bash
-# Test fastest model with 1 prompt
-python3 extended_benchmark.py \
-  --models "qwen3-coder:30b" \
-  --prompts "Explain Docker containers" \
-  --runs-per-prompt 1 \
-  --no-offload
+ollama pull llama3.2:1b
+ollama pull llama3.2:3b
+ollama pull gemma3:4b
+# ... etc
 ```
 
-**Time**: ~30 seconds
-**Use case**: Quick sanity check
+Or let the interactive menu recommend and download them for you.
 
----
+## Project Structure
 
-### Workflow 2: Compare Two Models
+```
+llm_benchmark/
+  cli.py          # CLI with run/compare/info/analyze subcommands
+  menu.py         # Interactive mode selection menu
+  display.py      # Terminal bar chart rendering
+  recommend.py    # RAM-based model recommendations
+  runner.py       # Benchmark execution with retry and timeout
+  models.py       # Pydantic data models
+  exporters.py    # JSON, CSV, Markdown report writers
+  preflight.py    # Ollama install/connectivity checks
+  system.py       # Cross-platform hardware detection
+  concurrent.py   # Parallel benchmark mode
+  sweep.py        # Parameter sweep mode
+  compare.py      # Results comparison
+  analyze.py      # Results analysis and ranking
+  prompts.py      # Prompt sets (small/medium/large)
+  config.py       # Rich Console singleton, constants
+```
+
+## Development
 
 ```bash
-# Compare small vs large model
-python3 extended_benchmark.py \
-  --models "deepseek-r1:8b" "qwen3-coder:30b" \
-  --runs-per-prompt 2
+# Install dev dependencies
+uv sync
+
+# Run tests
+uv run pytest tests/ -x -q
+
+# Run tests with coverage
+uv run pytest tests/ -x -q --cov=llm_benchmark --cov-fail-under=60
+
+# Lint
+uv run ruff check llm_benchmark/ tests/
 ```
 
-**Time**: ~15-20 minutes
-**Use case**: Deciding which model to use
+CI runs automatically on push to main and PRs (lint + compile check + tests).
 
----
+## Troubleshooting
 
-### Workflow 3: Full Comprehensive Benchmark
-
+**Ollama not running:**
 ```bash
-# Run complete test suite
-python3 extended_benchmark.py > benchmark_full.log 2>&1
-
-# Or with live output and log
-python3 extended_benchmark.py 2>&1 | tee benchmark_full.log
+ollama serve    # macOS — run in a separate terminal
+# Linux: sudo systemctl start ollama
 ```
 
-**Time**: 60-90 minutes
-**Use case**: Complete performance analysis, documentation
-
----
-
-### Workflow 4: Test Custom Use Case
-
+**Model too slow / system freezing:**
+Your model may be too large for available RAM. Try a smaller model:
 ```bash
-# Test models for coding tasks
-python3 extended_benchmark.py \
-  --prompts \
-    "Write a Python function to parse JSON" \
-    "Explain async/await in JavaScript" \
-    "Design a REST API for a todo app" \
-  --runs-per-prompt 2
+ollama pull llama3.2:1b
+uv run python -m llm_benchmark   # Quick test with smallest model
 ```
 
-**Time**: ~30-40 minutes
-**Use case**: Domain-specific evaluation
+**Timeout errors:**
+```bash
+uv run python -m llm_benchmark run --timeout 600   # Increase to 10 min
+```
 
----
+## License
 
-## 📚 Additional Resources
-
-### Ollama Documentation
-- [Ollama Official Site](https://ollama.com/)
-- [Model Library](https://ollama.com/library)
-- [API Documentation](https://github.com/ollama/ollama/blob/main/docs/api.md)
-
-### Benchmarking Best Practices
-- Run benchmarks when system is idle
-- Monitor GPU/CPU temperatures
-- Use consistent prompts for fair comparisons
-- Document hardware specifications with results
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Areas for improvement:
-
-- Additional prompt categories
-- Support for other LLM backends
-- GPU utilization metrics
-- Cost/performance analysis
-- Web UI for results visualization
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- [Ollama](https://ollama.com/) for making local LLMs accessible
-- Model creators: Qwen, DeepSeek, GPT-OSS teams
-- Community contributors and testers
-
----
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/llm-benchmark/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/llm-benchmark/discussions)
-
----
-
-**Happy Benchmarking! 🚀**
+MIT — see [LICENSE](LICENSE) for details.
