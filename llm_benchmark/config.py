@@ -12,6 +12,9 @@ DEFAULT_RUNS_PER_PROMPT: int = 2
 RAM_SAFETY_MULTIPLIER: float = 1.2
 DEFAULT_MAX_RETRIES: int = 3
 DEFAULT_WARMUP_PROMPT: str = "Hello"
+DEFAULT_CONCURRENT: int = 4
+SWEEP_NUM_CTX: list[int] = [512, 1024, 2048, 4096]
+SWEEP_PROMPT: str = "Write a short paragraph about the importance of benchmarking."
 
 
 def get_console() -> Console:

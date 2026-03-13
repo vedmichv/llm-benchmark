@@ -78,6 +78,40 @@ class SystemInfo(BaseModel):
     ollama_version: str
 
 
+class ConcurrentBatchResult(BaseModel):
+    """Result of a concurrent batch of N parallel requests to a single model."""
+
+    model: str
+    prompt: str
+    num_workers: int
+    wall_time_s: float
+    results: list[BenchmarkResult]
+    aggregate_throughput_ts: float
+    avg_request_throughput_ts: float
+
+
+class SweepConfigResult(BaseModel):
+    """Result of a single configuration sweep (one num_ctx / num_gpu combo)."""
+
+    model: str
+    num_ctx: int
+    num_gpu: int
+    response_ts: float
+    total_ts: float
+    eval_count: int
+    total_duration_s: float
+    success: bool
+    error: str | None = None
+
+
+class SweepModelResult(BaseModel):
+    """Aggregated sweep results for one model across all configurations."""
+
+    model: str
+    configs: list[SweepConfigResult]
+    best_config: SweepConfigResult | None = None
+
+
 def _ns_to_sec(ns: int) -> float:
     """Convert nanoseconds to seconds."""
     return ns / 1_000_000_000

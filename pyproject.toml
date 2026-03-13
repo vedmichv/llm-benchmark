@@ -20,3 +20,8 @@ test = ["pytest>=8.0"]
 
 [project.scripts]
 llm-benchmark = "llm_benchmark.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.3.0",
+]
