@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 Phase: 4 of 4 (Student Experience) -- IN PROGRESS
 Plan: 1 of ? in current phase
 Status: Plan 04-01 complete (interactive menu and bar chart)
-Last activity: 2026-03-13 - Completed quick task 1: Add model recommender to interactive menu
+Last activity: 2026-03-13 - Completed quick task 2: Add Ollama installation check to preflight
 
 Progress: [██████████] 100%
 
@@ -106,6 +106,9 @@ Recent decisions affecting current work:
 - [Phase 04]: Consolidated pytest into dev dep group, removed optional-deps test section
 - [Quick-1]: Import _get_ram_gb from system.py for shared RAM detection
 - [Quick-1]: Mock offer_model_downloads in menu tests to isolate input sequences
+- [Quick-2]: Use shutil.which for binary detection (stdlib, cross-platform)
+- [Quick-2]: try/except EOFError+KeyboardInterrupt on input() treats interrupts as decline
+- [Quick-2]: Post-install verification re-checks shutil.which to confirm success
 
 ### Pending Todos
 
@@ -120,9 +123,10 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 1 | Add model recommender to interactive menu | 2026-03-13 | 2777d57 | [1-add-model-recommender-to-interactive-men](./quick/1-add-model-recommender-to-interactive-men/) |
+| 2 | Add Ollama installation check to preflight | 2026-03-13 | f48ddfe | [2-add-ollama-installation-check-to-cli-sta](./quick/2-add-ollama-installation-check-to-cli-sta/) |
 
 ## Session Continuity
 
-Last session: 2026-03-13T15:04:35Z
-Stopped at: Completed quick-1-PLAN.md (model recommender)
+Last session: 2026-03-13T15:27:52Z
+Stopped at: Completed quick-2-PLAN.md (Ollama installation check)
 Resume file: None
