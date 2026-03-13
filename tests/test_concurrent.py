@@ -2,6 +2,7 @@
 
 import pytest
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from llm_benchmark.models import (
     BenchmarkResult,
@@ -10,6 +11,10 @@ from llm_benchmark.models import (
     SweepModelResult,
 )
 from llm_benchmark.config import DEFAULT_CONCURRENT, SWEEP_NUM_CTX, SWEEP_PROMPT
+from llm_benchmark.concurrent import (
+    auto_detect_concurrency,
+    run_concurrent_batch,
+)
 
 
 class TestConcurrentBatchResultModel:
@@ -128,10 +133,102 @@ class TestConfigConstants:
         assert len(SWEEP_PROMPT) > 10
 
 
-class TestAggregrateThroughput:
-    """Placeholder for aggregate throughput tests -- filled in Task 2."""
+class TestAutoDetectConcurrency:
+    """Test auto_detect_concurrency resource-based defaults."""
 
-    def test_placeholder(self):
-        """Aggregate throughput = sum(tokens) / wall_time (tested in Task 2)."""
-        # Will be replaced by actual test in Task 2
-        assert True
+    def test_high_vram_returns_8(self):
+        assert auto_detect_concurrency(64.0, 16.0) == 8
+
+    def test_high_vram_boundary(self):
+        assert auto_detect_concurrency(16.0, 16.0) == 8
+
+    def test_high_ram_no_gpu_returns_4(self):
+        assert auto_detect_concurrency(32.0, None) == 4
+
+    def test_high_ram_low_gpu_returns_4(self):
+        assert auto_detect_concurrency(32.0, 8.0) == 4
+
+    def test_low_resources_returns_2(self):
+        assert auto_detect_concurrency(16.0, None) == 2
+
+    def test_low_ram_low_gpu_returns_2(self):
+        assert auto_detect_concurrency(16.0, 8.0) == 2
+
+
+class TestRunConcurrentBatch:
+    """Test run_concurrent_batch fires N parallel requests."""
+
+    @patch("llm_benchmark.concurrent.ollama.AsyncClient")
+    def test_run_concurrent_batch_returns_n_results(
+        self, mock_client_cls, sample_ollama_response_dict
+    ):
+        """N workers produce N results with correct wall time."""
+        mock_response = MagicMock()
+        mock_response.model_dump.return_value = sample_ollama_response_dict
+
+        mock_client = AsyncMock()
+        mock_client.chat = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client_cls.return_value = mock_client
+
+        batch = run_concurrent_batch("llama3.2:1b", "Hello", n=3, timeout=30)
+
+        assert isinstance(batch, ConcurrentBatchResult)
+        assert len(batch.results) == 3
+        assert all(r.success for r in batch.results)
+        assert batch.wall_time_s > 0
+        assert batch.num_workers == 3
+
+    @patch("llm_benchmark.concurrent.ollama.AsyncClient")
+    def test_failed_request_continues(
+        self, mock_client_cls, sample_ollama_response_dict
+    ):
+        """One failing request does not stop others."""
+        mock_response = MagicMock()
+        mock_response.model_dump.return_value = sample_ollama_response_dict
+
+        call_count = 0
+
+        async def side_effect(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ConnectionError("Connection refused")
+            return mock_response
+
+        mock_client = AsyncMock()
+        mock_client.chat = AsyncMock(side_effect=side_effect)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client_cls.return_value = mock_client
+
+        batch = run_concurrent_batch("llama3.2:1b", "Hello", n=3, timeout=30)
+
+        assert len(batch.results) == 3
+        failed = [r for r in batch.results if not r.success]
+        succeeded = [r for r in batch.results if r.success]
+        assert len(failed) == 1
+        assert len(succeeded) == 2
+        assert "Connection refused" in failed[0].error
+
+    @patch("llm_benchmark.concurrent.ollama.AsyncClient")
+    def test_aggregate_throughput_calculation(
+        self, mock_client_cls, sample_ollama_response_dict
+    ):
+        """aggregate_throughput_ts = sum(eval_count) / wall_time_s."""
+        mock_response = MagicMock()
+        mock_response.model_dump.return_value = sample_ollama_response_dict
+
+        mock_client = AsyncMock()
+        mock_client.chat = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client_cls.return_value = mock_client
+
+        batch = run_concurrent_batch("llama3.2:1b", "Hello", n=2, timeout=30)
+
+        # Each response has eval_count=120, so total=240
+        # aggregate_throughput_ts = 240 / wall_time_s
+        expected = 240.0 / batch.wall_time_s
+        assert abs(batch.aggregate_throughput_ts - expected) < 0.1
