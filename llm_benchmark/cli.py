@@ -1,4 +1,4 @@
-"""Argparse CLI with run/compare/info subcommands.
+"""Argparse CLI with run/compare/info/analyze subcommands.
 
 Entry point for ``python -m llm_benchmark``. Dispatches to the appropriate
 handler based on the subcommand.
@@ -85,6 +85,23 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"Max retries per failed run (default: {DEFAULT_MAX_RETRIES}, 0 to disable)",
     )
 
+    # Mutually exclusive group for --concurrent and --sweep
+    mode_group = run_parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        "--concurrent",
+        type=int,
+        nargs="?",
+        const=-1,
+        default=None,
+        help="Run concurrent benchmarks (auto-detect workers if no value given)",
+    )
+    mode_group.add_argument(
+        "--sweep",
+        action="store_true",
+        default=False,
+        help="Run parameter sweep (num_ctx/num_gpu) for each model",
+    )
+
     # compare subcommand
     compare_parser = subparsers.add_parser(
         "compare", help="Compare benchmark results"
@@ -102,6 +119,37 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # info subcommand
     subparsers.add_parser("info", help="Show system information")
+
+    # analyze subcommand
+    analyze_parser = subparsers.add_parser(
+        "analyze", help="Analyze and rank benchmark results"
+    )
+    analyze_parser.add_argument(
+        "file",
+        help="JSON result file to analyze",
+    )
+    analyze_parser.add_argument(
+        "--sort",
+        choices=["response_ts", "total_ts", "prompt_eval_ts", "load_time"],
+        default="response_ts",
+        help="Sort metric (default: response_ts)",
+    )
+    analyze_parser.add_argument(
+        "--top",
+        type=int,
+        default=None,
+        help="Show top N models",
+    )
+    analyze_parser.add_argument(
+        "--asc",
+        action="store_true",
+        help="Sort ascending (slowest first)",
+    )
+    analyze_parser.add_argument(
+        "--detail",
+        action="store_true",
+        help="Show per-run breakdown",
+    )
 
     return parser
 
@@ -126,6 +174,117 @@ def _handle_run(args: argparse.Namespace) -> int:
     console.print(format_system_summary())
     console.print()
 
+    system_info = get_system_info()
+
+    # --- Sweep mode ---
+    if args.sweep:
+        from llm_benchmark.sweep import run_sweep_for_model
+        from llm_benchmark.exporters import (
+            export_sweep_json,
+            export_sweep_csv,
+            export_sweep_markdown,
+        )
+
+        console.print(
+            f"[bold]Sweep mode:[/bold] Testing parameter combinations "
+            f"for {len(models)} model(s)"
+        )
+        console.print()
+
+        sweep_results = []
+        for idx, model in enumerate(models):
+            model_name = model.model
+            console.rule(
+                f"[bold]{model_name}[/bold] ({idx + 1}/{len(models)})"
+            )
+            result = run_sweep_for_model(
+                model_name=model_name,
+                timeout=args.timeout,
+                skip_warmup=args.skip_warmup,
+            )
+            sweep_results.append(result)
+            console.print()
+
+        if sweep_results:
+            json_path = export_sweep_json(sweep_results, system_info)
+            csv_path = export_sweep_csv(sweep_results, system_info)
+            md_path = export_sweep_markdown(sweep_results, system_info)
+            console.print("[bold]Sweep results saved:[/bold]")
+            console.print(f"  JSON: {json_path}")
+            console.print(f"  CSV:  {csv_path}")
+            console.print(f"  MD:   {md_path}")
+
+        return 0
+
+    # --- Concurrent mode ---
+    if args.concurrent is not None:
+        from llm_benchmark.concurrent import (
+            auto_detect_concurrency,
+            benchmark_model_concurrent,
+        )
+        from llm_benchmark.exporters import (
+            export_concurrent_json,
+            export_concurrent_csv,
+            export_concurrent_markdown,
+        )
+
+        num_workers = args.concurrent
+        if num_workers == -1:
+            num_workers = auto_detect_concurrency(
+                ram_gb=system_info.ram_gb,
+                gpu_vram_gb=system_info.gpu_vram_gb,
+            )
+        console.print(f"[bold]Concurrent mode:[/bold] {num_workers} workers")
+        console.print()
+
+        # Determine prompts
+        if args.prompts:
+            prompts = args.prompts
+        else:
+            prompts = get_prompts(args.prompt_set)
+
+        console.print(
+            f"Benchmarking {len(models)} model(s) with "
+            f"{len(prompts)} prompt(s), {args.runs_per_prompt} run(s) each, "
+            f"{num_workers} concurrent workers"
+        )
+        console.print()
+
+        all_batch_results = []
+        for idx, model in enumerate(models):
+            model_name = model.model
+            console.rule(
+                f"[bold]{model_name}[/bold] ({idx + 1}/{len(models)})"
+            )
+            batches = benchmark_model_concurrent(
+                model_name=model_name,
+                prompts=prompts,
+                num_workers=num_workers,
+                runs_per_prompt=args.runs_per_prompt,
+                timeout=args.timeout,
+                skip_warmup=args.skip_warmup,
+                verbose=args.verbose,
+            )
+            all_batch_results.append(batches)
+
+            # Unload after each model
+            unload_model(model_name)
+            console.print()
+
+        if all_batch_results:
+            json_path = export_concurrent_json(all_batch_results, system_info)
+            csv_path = export_concurrent_csv(all_batch_results, system_info)
+            md_path = export_concurrent_markdown(
+                all_batch_results, system_info
+            )
+            console.print("[bold]Concurrent results saved:[/bold]")
+            console.print(f"  JSON: {json_path}")
+            console.print(f"  CSV:  {csv_path}")
+            console.print(f"  MD:   {md_path}")
+
+        return 0
+
+    # --- Standard mode ---
     # Determine prompts
     if args.prompts:
         prompts = args.prompts
@@ -139,7 +298,6 @@ def _handle_run(args: argparse.Namespace) -> int:
     console.print()
 
     # Run benchmarks
-    system_info = get_system_info()
     all_summaries = []
 
     for idx, model in enumerate(models):
@@ -216,10 +374,25 @@ def _handle_info(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_analyze(args: argparse.Namespace) -> int:
+    """Handle the 'analyze' subcommand."""
+    from llm_benchmark.analyze import analyze_results
+
+    analyze_results(
+        filepath=args.file,
+        sort_by=args.sort,
+        top_n=args.top,
+        ascending=args.asc,
+        detail=args.detail,
+    )
+    return 0
+
+
 _HANDLERS = {
     "run": _handle_run,
     "compare": _handle_compare,
     "info": _handle_info,
+    "analyze": _handle_analyze,
 }
 
 
