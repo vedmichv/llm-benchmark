@@ -1,19 +1,16 @@
 """Tests for concurrent benchmarking module."""
 
-import pytest
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from llm_benchmark.models import (
-    BenchmarkResult,
-    ConcurrentBatchResult,
-    SweepConfigResult,
-    SweepModelResult,
-)
-from llm_benchmark.config import DEFAULT_CONCURRENT, SWEEP_NUM_CTX, SWEEP_PROMPT
 from llm_benchmark.concurrent import (
     auto_detect_concurrency,
     run_concurrent_batch,
+)
+from llm_benchmark.config import DEFAULT_CONCURRENT, SWEEP_NUM_CTX, SWEEP_PROMPT
+from llm_benchmark.models import (
+    ConcurrentBatchResult,
+    SweepConfigResult,
+    SweepModelResult,
 )
 
 

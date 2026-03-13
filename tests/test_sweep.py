@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from llm_benchmark.models import SweepConfigResult, SweepModelResult
 from llm_benchmark.sweep import (
     build_sweep_configs,

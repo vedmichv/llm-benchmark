@@ -14,7 +14,6 @@ from pathlib import Path
 
 from llm_benchmark.models import ModelSummary, SystemInfo, _ns_to_sec
 
-
 _RESULTS_GITIGNORE = """\
 # Benchmark result files -- do not commit
 *.json
