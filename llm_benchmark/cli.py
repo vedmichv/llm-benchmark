@@ -457,6 +457,26 @@ def main(argv: list[str] | None = None) -> int:
     """
     args_list = argv if argv is not None else sys.argv[1:]
 
+    # --recommend: show all recommended models (force mode)
+    if args_list == ["--recommend"]:
+        try:
+            from llm_benchmark.preflight import run_preflight_checks
+            from llm_benchmark.recommend import offer_model_downloads
+            from llm_benchmark.system import format_system_summary
+
+            console = get_console()
+            models = run_preflight_checks()
+            console.print()
+            console.print("[bold]LLM Benchmark — Model Recommender[/bold]")
+            console.print()
+            console.print(format_system_summary())
+            console.print()
+            offer_model_downloads(models, force=True)
+            return 0
+        except KeyboardInterrupt:
+            get_console().print("\n[yellow]Interrupted.[/yellow]")
+            return 0
+
     # No-args: launch interactive menu
     if not args_list:
         try:

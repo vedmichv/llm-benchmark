@@ -25,24 +25,27 @@ RAM_TIER_THRESHOLDS: dict[str, int] = {
 }
 
 # Curated model list ordered by tier, then roughly by size.
+# Updated 2026-03 with latest leaderboard models (lmarena).
 TIERED_MODELS: list[dict[str, str]] = [
     # --- small (any RAM) ---
+    {"name": "qwen3.5:0.8b", "size_label": "0.8B", "tier": "small", "description": "Smallest Qwen 3.5 (vision+text)"},
     {"name": "llama3.2:1b", "size_label": "1B", "tier": "small", "description": "Fast general-purpose chat"},
-    {"name": "qwen2.5:0.5b", "size_label": "0.5B", "tier": "small", "description": "Smallest available model"},
+    {"name": "qwen3.5:2b", "size_label": "2B", "tier": "small", "description": "Compact multimodal model"},
     {"name": "phi4-mini", "size_label": "3.8B", "tier": "small", "description": "Compact reasoning model"},
     # --- medium (16 GB+) ---
-    {"name": "llama3.2:3b", "size_label": "3B", "tier": "medium", "description": "Balanced speed and quality"},
-    {"name": "phi4", "size_label": "14B", "tier": "medium", "description": "Strong reasoning at medium size"},
-    {"name": "qwen2.5:7b", "size_label": "7B", "tier": "medium", "description": "Versatile 7B model"},
+    {"name": "qwen3.5:4b", "size_label": "4B", "tier": "medium", "description": "Efficient multimodal (256K ctx)"},
     {"name": "gemma3:4b", "size_label": "4B", "tier": "medium", "description": "Google's efficient model"},
+    {"name": "llama3.2:3b", "size_label": "3B", "tier": "medium", "description": "Balanced speed and quality"},
+    {"name": "qwen3.5:9b", "size_label": "9B", "tier": "medium", "description": "Strong all-rounder (default)"},
+    {"name": "mistral:7b", "size_label": "7B", "tier": "medium", "description": "Classic 7B from Mistral AI"},
     # --- large (36 GB+) ---
-    {"name": "llama3.1:8b", "size_label": "8B", "tier": "large", "description": "High-quality 8B model"},
-    {"name": "qwen2.5:14b", "size_label": "14B", "tier": "large", "description": "Strong multilingual model"},
+    {"name": "qwen3.5:27b", "size_label": "27B", "tier": "large", "description": "Top-tier open model (arena #10)"},
     {"name": "gemma3:12b", "size_label": "12B", "tier": "large", "description": "Google's larger model"},
-    {"name": "phi4:14b", "size_label": "14B", "tier": "large", "description": "Full-size reasoning model"},
+    {"name": "deepseek-r1:14b", "size_label": "14B", "tier": "large", "description": "Reasoning-focused model"},
     # --- xl (64 GB+) ---
-    {"name": "llama3.3:70b", "size_label": "70B", "tier": "xl", "description": "Flagship large model"},
-    {"name": "qwen2.5:32b", "size_label": "32B", "tier": "xl", "description": "High-capacity multilingual"},
+    {"name": "qwen3.5:35b", "size_label": "35B", "tier": "xl", "description": "Qwen 3.5 large (arena top-20)"},
+    {"name": "llama3.3:70b", "size_label": "70B", "tier": "xl", "description": "Meta flagship 70B model"},
+    {"name": "qwen3:32b", "size_label": "32B", "tier": "xl", "description": "Qwen 3 thinking model"},
 ]
 
 # Tier display order (for grouped UI output).
@@ -96,7 +99,7 @@ def filter_already_installed(
     return [m for m in recommended if m["name"] not in installed_set]
 
 
-def offer_model_downloads(installed_models: list) -> list:
+def offer_model_downloads(installed_models: list, *, force: bool = False) -> list:
     """Interactive prompt to download recommended models.
 
     Called from the interactive menu after system info display.  Detects
@@ -124,26 +127,33 @@ def offer_model_downloads(installed_models: list) -> list:
 
     recommended = get_recommended_models(ram_gb)
     installed_names = [m.model for m in installed_models]
-    available = filter_already_installed(recommended, installed_names)
+
+    if force:
+        # Show all recommended models, mark installed ones
+        available = recommended
+    else:
+        available = filter_already_installed(recommended, installed_names)
 
     if not available:
         return installed_models
 
-    # Ask whether to show recommendations
-    try:
-        answer = input("  Download recommended models? (y/N): ").strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        console.print()
-        return installed_models
+    # Ask whether to show recommendations (skip prompt in force mode)
+    if not force:
+        try:
+            answer = input("  Download recommended models? (y/N): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            console.print()
+            return installed_models
 
-    if answer != "y":
-        return installed_models
+        if answer != "y":
+            return installed_models
 
     # Display numbered list grouped by tier
     console.print()
     number = 1
     number_map: dict[int, dict[str, str]] = {}
     current_tier = None
+    installed_set = set(installed_names)
 
     for model in available:
         if model["tier"] != current_tier:
@@ -151,9 +161,15 @@ def offer_model_downloads(installed_models: list) -> list:
             label = _TIER_LABELS.get(current_tier, current_tier)
             console.print(f"  [bold]{label}[/bold]")
 
-        console.print(
-            f"    {number}. {model['name']}  ({model['size_label']}) - {model['description']}"
-        )
+        is_installed = model["name"] in installed_set
+        if is_installed:
+            console.print(
+                f"    {number}. {model['name']}  ({model['size_label']}) - {model['description']} [green][installed][/green]"
+            )
+        else:
+            console.print(
+                f"    {number}. {model['name']}  ({model['size_label']}) - {model['description']}"
+            )
         number_map[number] = model
         number += 1
 
@@ -185,14 +201,22 @@ def offer_model_downloads(installed_models: list) -> list:
     if not selected:
         return installed_models
 
-    # Pull each selected model
+    # Pull each selected model (skip already installed)
     console.print()
+    pulled_any = False
     for model in selected:
+        if model["name"] in installed_set:
+            console.print(f"  [dim]Skipping {model['name']} (already installed)[/dim]")
+            continue
+        pulled_any = True
         console.print(f"  Pulling [bold]{model['name']}[/bold] ...")
         subprocess.run(["ollama", "pull", model["name"]])
         console.print(f"  [green]Done:[/green] {model['name']}")
 
     console.print()
+
+    if not pulled_any:
+        return installed_models
 
     # Re-fetch installed models
     import ollama as ollama_client
