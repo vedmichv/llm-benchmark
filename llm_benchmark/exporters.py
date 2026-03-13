@@ -212,6 +212,7 @@ def export_markdown(
     results: list[ModelSummary],
     system_info: SystemInfo | None = None,
     output_dir: str | Path = "results",
+    mode: str = "standard",
 ) -> Path:
     """Write benchmark results as a Markdown report.
 
@@ -219,31 +220,44 @@ def export_markdown(
         results: List of ModelSummary objects.
         system_info: Optional system information to include.
         output_dir: Directory for output file (created if needed).
+        mode: Mode label for the report header.
 
     Returns:
         Path to the written Markdown file.
     """
+    from llm_benchmark.display import render_text_bar_chart
+
     out_dir = _ensure_dir(output_dir)
     filepath = out_dir / f"benchmark_{_timestamp()}.md"
 
     lines: list[str] = []
     lines.append("# LLM Benchmark Results\n")
-    lines.append(
-        f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-    )
+    header_parts = [
+        f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"**Models:** {len(results)}",
+        f"**Mode:** {mode.title()}",
+    ]
+    lines.append(" | ".join(header_parts) + "\n")
 
-    # System information
+    # One-line system information
     if system_info:
-        lines.append("## System Information\n")
-        lines.append(f"- **CPU:** {system_info.cpu}")
-        lines.append(f"- **RAM:** {system_info.ram_gb:.1f} GB")
-        lines.append(f"- **GPU:** {system_info.gpu}")
-        if system_info.gpu_vram_gb is not None:
-            lines.append(f"- **GPU VRAM:** {system_info.gpu_vram_gb:.1f} GB")
-        lines.append(f"- **OS:** {system_info.os_name}")
-        lines.append(f"- **Python:** {system_info.python_version}")
-        lines.append(f"- **Ollama:** {system_info.ollama_version}")
-        lines.append("")
+        lines.append(
+            f"**System:** {system_info.cpu}, {system_info.ram_gb:.1f} GB RAM, "
+            f"{system_info.gpu}, {system_info.os_name}\n"
+        )
+
+    # Rankings section with text bar chart
+    if results:
+        rankings = sorted(
+            [(s.model, s.avg_response_ts) for s in results],
+            key=lambda x: x[1],
+            reverse=True,
+        )
+        chart_text = render_text_bar_chart(rankings)
+        if chart_text:
+            lines.append("## Rankings\n")
+            lines.append(chart_text)
+            lines.append("")
 
     lines.append("---\n")
 
@@ -423,6 +437,8 @@ def export_concurrent_markdown(
     Returns:
         Path to the written Markdown file.
     """
+    from llm_benchmark.display import render_text_bar_chart
+
     out_dir = _ensure_dir(output_dir)
     filepath = out_dir / f"benchmark_{_timestamp()}.md"
 
@@ -433,25 +449,43 @@ def export_concurrent_markdown(
             num_workers = model_batches[0].num_workers
             break
 
+    # Count unique models
+    model_names = set()
+    for model_batches in batch_results:
+        for batch in model_batches:
+            model_names.add(batch.model)
+
     lines: list[str] = []
     lines.append("# LLM Concurrent Benchmark Results\n")
-    lines.append(
-        f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-    )
-    lines.append(f"**Mode:** Concurrent ({num_workers} workers)\n")
+    header_parts = [
+        f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"**Models:** {len(model_names)}",
+        f"**Mode:** Concurrent ({num_workers} workers)",
+    ]
+    lines.append(" | ".join(header_parts) + "\n")
 
-    # System information
+    # One-line system information
     if system_info:
-        lines.append("## System Information\n")
-        lines.append(f"- **CPU:** {system_info.cpu}")
-        lines.append(f"- **RAM:** {system_info.ram_gb:.1f} GB")
-        lines.append(f"- **GPU:** {system_info.gpu}")
-        if system_info.gpu_vram_gb is not None:
-            lines.append(f"- **GPU VRAM:** {system_info.gpu_vram_gb:.1f} GB")
-        lines.append(f"- **OS:** {system_info.os_name}")
-        lines.append(f"- **Python:** {system_info.python_version}")
-        lines.append(f"- **Ollama:** {system_info.ollama_version}")
-        lines.append("")
+        lines.append(
+            f"**System:** {system_info.cpu}, {system_info.ram_gb:.1f} GB RAM, "
+            f"{system_info.gpu}, {system_info.os_name}\n"
+        )
+
+    # Rankings section: group by model, take max aggregate_throughput_ts per model
+    model_max: dict[str, float] = {}
+    for model_batches in batch_results:
+        for batch in model_batches:
+            current = model_max.get(batch.model, 0.0)
+            if batch.aggregate_throughput_ts > current:
+                model_max[batch.model] = batch.aggregate_throughput_ts
+
+    if model_max:
+        rankings = sorted(model_max.items(), key=lambda x: x[1], reverse=True)
+        chart_text = render_text_bar_chart(rankings, metric_label="t/s (aggregate)")
+        if chart_text:
+            lines.append("## Rankings\n")
+            lines.append(chart_text)
+            lines.append("")
 
     lines.append("---\n")
 
@@ -642,27 +676,49 @@ def export_sweep_markdown(
     Returns:
         Path to the written Markdown file.
     """
+    from llm_benchmark.display import render_text_bar_chart
+
     out_dir = _ensure_dir(output_dir)
     filepath = out_dir / f"sweep_{_timestamp()}.md"
 
     lines: list[str] = []
     lines.append("# LLM Parameter Sweep Results\n")
-    lines.append(
-        f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-    )
-    lines.append("**Mode:** Parameter Sweep\n")
+    header_parts = [
+        f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"**Models:** {len(sweep_results)}",
+        "**Mode:** Sweep",
+    ]
+    lines.append(" | ".join(header_parts) + "\n")
 
-    # System information
+    # One-line system information
     if system_info:
-        lines.append("## System Information\n")
-        lines.append(f"- **CPU:** {system_info.cpu}")
-        lines.append(f"- **RAM:** {system_info.ram_gb:.1f} GB")
-        lines.append(f"- **GPU:** {system_info.gpu}")
-        if system_info.gpu_vram_gb is not None:
-            lines.append(f"- **GPU VRAM:** {system_info.gpu_vram_gb:.1f} GB")
-        lines.append(f"- **OS:** {system_info.os_name}")
-        lines.append(f"- **Python:** {system_info.python_version}")
-        lines.append(f"- **Ollama:** {system_info.ollama_version}")
+        lines.append(
+            f"**System:** {system_info.cpu}, {system_info.ram_gb:.1f} GB RAM, "
+            f"{system_info.gpu}, {system_info.os_name}\n"
+        )
+
+    # Rankings section: models with best_config, sorted by response_ts
+    best_rankings: list[tuple[str, float]] = []
+    for sr in sweep_results:
+        if sr.best_config is not None:
+            best_rankings.append((sr.model, sr.best_config.response_ts))
+    best_rankings.sort(key=lambda x: x[1], reverse=True)
+
+    if best_rankings:
+        chart_text = render_text_bar_chart(best_rankings)
+        if chart_text:
+            lines.append("## Rankings\n")
+            lines.append(chart_text)
+            lines.append("")
+        # Per-model best config callouts
+        for sr in sweep_results:
+            if sr.best_config is not None:
+                lines.append(
+                    f"Best config for {sr.model}: "
+                    f"num_ctx={sr.best_config.num_ctx}, "
+                    f"num_gpu={sr.best_config.num_gpu} "
+                    f"({sr.best_config.response_ts:.1f} t/s)"
+                )
         lines.append("")
 
     lines.append("---\n")
