@@ -1,6 +1,6 @@
 """Tests for llm_benchmark.system module."""
 
-from llm_benchmark.system import get_system_info, format_system_summary
+from llm_benchmark.system import format_system_summary, get_system_info
 
 
 class TestGetSystemInfo:
@@ -10,7 +10,8 @@ class TestGetSystemInfo:
         """Verify get_system_info() returns a SystemInfo with non-empty cpu."""
         info = get_system_info()
         assert info.cpu != ""
-        assert info.cpu != "Unknown" or True  # May be Unknown on CI
+        # CPU may be "Unknown" on CI, so we only check it's non-empty
+        assert isinstance(info.cpu, str)
 
     def test_returns_positive_ram(self):
         """Verify ram_gb > 0 on the current platform."""

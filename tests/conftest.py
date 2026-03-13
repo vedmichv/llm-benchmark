@@ -1,8 +1,9 @@
 """Shared test fixtures."""
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from llm_benchmark.models import BenchmarkResult, OllamaResponse
 
@@ -12,7 +13,7 @@ def sample_ollama_response_dict():
     """Return a valid Ollama response dict with realistic nanosecond values."""
     return {
         "model": "llama3.2:1b",
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "message": {"role": "assistant", "content": "The sky is blue because..."},
         "done": True,
         "total_duration": 5_000_000_000,  # 5 seconds

@@ -14,14 +14,13 @@ import threading
 from typing import Any
 
 import ollama
-from ollama import RequestError as _RequestError, ResponseError as _ResponseError
-
+from ollama import RequestError as _RequestError
+from ollama import ResponseError as _ResponseError
 from tenacity import (
     retry,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception,
-    before_sleep_log,
 )
 
 from llm_benchmark.config import (

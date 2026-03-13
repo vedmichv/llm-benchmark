@@ -100,9 +100,21 @@ def analyze_results(
 
     table.add_column("#", style="bold", justify="right")
     # Bold the sorted column header
-    resp_header = "[bold]Response (t/s)[/bold]" if sort_by == "response_ts" else "Response (t/s)"
-    total_header = "[bold]Total (t/s)[/bold]" if sort_by == "total_ts" else "Total (t/s)"
-    prompt_header = "[bold]Prompt Eval (t/s)[/bold]" if sort_by == "prompt_eval_ts" else "Prompt Eval (t/s)"
+    resp_header = (
+        "[bold]Response (t/s)[/bold]"
+        if sort_by == "response_ts"
+        else "Response (t/s)"
+    )
+    total_header = (
+        "[bold]Total (t/s)[/bold]"
+        if sort_by == "total_ts"
+        else "Total (t/s)"
+    )
+    prompt_header = (
+        "[bold]Prompt Eval (t/s)[/bold]"
+        if sort_by == "prompt_eval_ts"
+        else "Prompt Eval (t/s)"
+    )
 
     table.add_column("Model", style="cyan")
     table.add_column(resp_header, justify="right")

@@ -44,10 +44,7 @@ def render_bar_chart(
     console.print()
 
     for name, rate in rankings:
-        if max_rate > 0:
-            bar_len = round(BAR_WIDTH * rate / max_rate)
-        else:
-            bar_len = 0
+        bar_len = round(BAR_WIDTH * rate / max_rate) if max_rate > 0 else 0
         bar = BAR_FULL * bar_len + BAR_EMPTY * (BAR_WIDTH - bar_len)
         console.print(f"  {name:<{max_name_len}}  {bar}  {rate:>6.1f} {metric_label}")
 
@@ -92,10 +89,7 @@ def render_text_bar_chart(
     lines.append("")
 
     for name, rate in rankings:
-        if max_rate > 0:
-            bar_len = round(BAR_WIDTH * rate / max_rate)
-        else:
-            bar_len = 0
+        bar_len = round(BAR_WIDTH * rate / max_rate) if max_rate > 0 else 0
         bar = BAR_FULL * bar_len + BAR_EMPTY * (BAR_WIDTH - bar_len)
         lines.append(f"  {name:<{max_name_len}}  {bar}  {rate:>6.1f} {metric_label}")
 

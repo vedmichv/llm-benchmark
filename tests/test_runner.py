@@ -1,14 +1,13 @@
 """Tests for llm_benchmark.runner module."""
 
-import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from llm_benchmark.config import DEFAULT_TIMEOUT
-from llm_benchmark.models import BenchmarkResult, OllamaResponse, ModelSummary
+from llm_benchmark.models import BenchmarkResult, OllamaResponse
 
 
 class TestComputeAveragesRunner:
@@ -25,7 +24,7 @@ class TestComputeAveragesRunner:
         """Helper to build a BenchmarkResult with a valid OllamaResponse."""
         resp = OllamaResponse(
             model="test-model",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             message={"role": "assistant", "content": "test"},
             done=True,
             total_duration=prompt_eval_duration + eval_duration,
@@ -130,6 +129,7 @@ class TestRunWithTimeout:
     def test_timeout_no_sigalrm(self):
         """Confirm no signal.SIGALRM usage in runner module."""
         import inspect
+
         import llm_benchmark.runner as runner_mod
 
         source = inspect.getsource(runner_mod)
@@ -231,15 +231,10 @@ class TestWarmupModel:
     def test_warmup_prints_ready_on_success(self, mock_ollama, capsys):
         """warmup_model() prints 'Warming up...' then 'Ready' on success."""
         from llm_benchmark.runner import warmup_model
-        from llm_benchmark.config import get_console
 
-        console = get_console()
         warmup_model("llama3.2:1b")
 
-        # Check console output contains expected text
-        output = console.file.getvalue() if hasattr(console.file, "getvalue") else ""
-        # Use capsys as fallback - Rich writes to its own console
-        # We verify the function completes without error and returns True
+        # Verify the function completes without error (Rich writes to its own console)
 
     @patch("llm_benchmark.runner.ollama")
     def test_warmup_does_not_raise_on_failure(self, mock_ollama):
@@ -289,8 +284,9 @@ class TestRetryLogic:
     @patch("llm_benchmark.runner.ollama")
     def test_retries_on_request_error(self, mock_ollama, sample_ollama_response_dict):
         """run_single_benchmark retries on ollama.RequestError."""
-        from llm_benchmark.runner import run_single_benchmark
         import ollama as ollama_lib
+
+        from llm_benchmark.runner import run_single_benchmark
 
         mock_response = MagicMock()
         mock_response.model_dump.return_value = sample_ollama_response_dict
@@ -307,8 +303,9 @@ class TestRetryLogic:
     @patch("llm_benchmark.runner.ollama")
     def test_retries_on_response_error_500(self, mock_ollama, sample_ollama_response_dict):
         """run_single_benchmark retries on ResponseError with status_code >= 500."""
-        from llm_benchmark.runner import run_single_benchmark
         import ollama as ollama_lib
+
+        from llm_benchmark.runner import run_single_benchmark
 
         mock_response = MagicMock()
         mock_response.model_dump.return_value = sample_ollama_response_dict
@@ -324,8 +321,9 @@ class TestRetryLogic:
     @patch("llm_benchmark.runner.ollama")
     def test_no_retry_on_response_error_404(self, mock_ollama):
         """run_single_benchmark does NOT retry on ResponseError with status_code 404."""
-        from llm_benchmark.runner import run_single_benchmark
         import ollama as ollama_lib
+
+        from llm_benchmark.runner import run_single_benchmark
 
         err_404 = ollama_lib.ResponseError("not found")
         err_404.status_code = 404
@@ -376,7 +374,7 @@ class TestCacheVisibility:
         """Helper to build a BenchmarkResult."""
         resp = OllamaResponse(
             model="test-model",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             message={"role": "assistant", "content": "test"},
             done=True,
             total_duration=prompt_eval_duration + eval_duration,
@@ -400,7 +398,9 @@ class TestCacheVisibility:
     def test_cached_result_shows_cached_tag(self, mock_run, mock_warmup):
         """When result.prompt_cached is True, '[cached]' appears in console output."""
         import io
+
         from rich.console import Console
+
         from llm_benchmark.runner import benchmark_model
 
         buf = io.StringIO()
@@ -419,7 +419,9 @@ class TestCacheVisibility:
     def test_first_cached_shows_explanation(self, mock_run, mock_warmup):
         """First cached result in session triggers one-liner explanation."""
         import io
+
         from rich.console import Console
+
         from llm_benchmark.runner import benchmark_model
 
         buf = io.StringIO()
@@ -438,7 +440,9 @@ class TestCacheVisibility:
     def test_second_cached_no_repeat_explanation(self, mock_run, mock_warmup):
         """Second cached result does NOT repeat the explanation."""
         import io
+
         from rich.console import Console
+
         from llm_benchmark.runner import benchmark_model
 
         buf = io.StringIO()
@@ -458,7 +462,9 @@ class TestCacheVisibility:
     def test_all_cached_shows_warning(self, mock_run, mock_warmup):
         """When ALL results for a model are cached, warning about unavailable prompt eval metrics is shown."""
         import io
+
         from rich.console import Console
+
         from llm_benchmark.runner import benchmark_model
 
         buf = io.StringIO()
@@ -477,7 +483,9 @@ class TestCacheVisibility:
     def test_non_cached_no_tag(self, mock_run, mock_warmup):
         """Non-cached results do NOT show [cached] tag."""
         import io
+
         from rich.console import Console
+
         from llm_benchmark.runner import benchmark_model
 
         buf = io.StringIO()
@@ -499,8 +507,8 @@ class TestBenchmarkModelWarmup:
     @patch("llm_benchmark.runner.run_single_benchmark")
     def test_warmup_called_when_not_skipped(self, mock_run, mock_warmup, sample_ollama_response_dict):
         """benchmark_model calls warmup_model before prompt loop when skip_warmup=False."""
-        from llm_benchmark.runner import benchmark_model
         from llm_benchmark.models import BenchmarkResult, OllamaResponse
+        from llm_benchmark.runner import benchmark_model
 
         resp = OllamaResponse.model_validate(sample_ollama_response_dict)
         mock_run.return_value = BenchmarkResult(
@@ -518,8 +526,8 @@ class TestBenchmarkModelWarmup:
     @patch("llm_benchmark.runner.run_single_benchmark")
     def test_warmup_skipped_when_flag_set(self, mock_run, mock_warmup, sample_ollama_response_dict):
         """benchmark_model skips warmup when skip_warmup=True."""
-        from llm_benchmark.runner import benchmark_model
         from llm_benchmark.models import BenchmarkResult, OllamaResponse
+        from llm_benchmark.runner import benchmark_model
 
         resp = OllamaResponse.model_validate(sample_ollama_response_dict)
         mock_run.return_value = BenchmarkResult(

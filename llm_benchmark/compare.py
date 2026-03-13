@@ -78,7 +78,7 @@ def compare_results(
     console.rule("[bold]Benchmark Comparison[/bold]")
     console.print()
 
-    for results, label in zip(results_list, run_labels):
+    for results, label in zip(results_list, run_labels, strict=False):
         sys_info = results.get("system_info")
         if sys_info:
             console.print(f"[bold]{label}:[/bold]")

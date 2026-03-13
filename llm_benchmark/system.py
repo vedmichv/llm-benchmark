@@ -8,11 +8,9 @@ and subprocess calls to platform-specific tools (sysctl on macOS,
 
 from __future__ import annotations
 
-import os
 import platform
 import subprocess
 
-from llm_benchmark.config import get_console
 from llm_benchmark.models import SystemInfo
 
 
@@ -58,7 +56,7 @@ def _get_cpu_model() -> str:
             pass
     elif current_os == "Linux":
         try:
-            with open("/proc/cpuinfo", "r") as f:
+            with open("/proc/cpuinfo") as f:
                 for line in f:
                     if "model name" in line:
                         return line.split(":")[1].strip()
@@ -104,7 +102,7 @@ def _get_ram_gb() -> float:
             pass
     elif current_os == "Linux":
         try:
-            with open("/proc/meminfo", "r") as f:
+            with open("/proc/meminfo") as f:
                 for line in f:
                     if "MemTotal" in line:
                         ram_kb = int(line.split()[1])

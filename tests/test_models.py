@@ -3,6 +3,8 @@
 import io
 import sys
 
+import pytest
+
 
 def test_ollama_response_valid(sample_ollama_response_dict):
     """OllamaResponse validates a complete response dict successfully."""
@@ -106,6 +108,3 @@ def test_compute_averages_empty():
     from llm_benchmark.runner import compute_averages
 
     assert compute_averages([]) == {}
-
-
-import pytest

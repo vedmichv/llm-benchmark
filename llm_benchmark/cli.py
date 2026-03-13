@@ -82,7 +82,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--max-retries",
         type=int,
         default=DEFAULT_MAX_RETRIES,
-        help=f"Max retries per failed run (default: {DEFAULT_MAX_RETRIES}, 0 to disable)",
+        help=(
+            f"Max retries per failed run "
+            f"(default: {DEFAULT_MAX_RETRIES}, 0 to disable)"
+        ),
     )
 
     # Mutually exclusive group for --concurrent and --sweep
@@ -178,12 +181,12 @@ def _handle_run(args: argparse.Namespace) -> int:
 
     # --- Sweep mode ---
     if args.sweep:
-        from llm_benchmark.sweep import run_sweep_for_model
         from llm_benchmark.exporters import (
-            export_sweep_json,
             export_sweep_csv,
+            export_sweep_json,
             export_sweep_markdown,
         )
+        from llm_benchmark.sweep import run_sweep_for_model
 
         console.print(
             f"[bold]Sweep mode:[/bold] Testing parameter combinations "
@@ -240,8 +243,8 @@ def _handle_run(args: argparse.Namespace) -> int:
             benchmark_model_concurrent,
         )
         from llm_benchmark.exporters import (
-            export_concurrent_json,
             export_concurrent_csv,
+            export_concurrent_json,
             export_concurrent_markdown,
         )
 
@@ -255,10 +258,7 @@ def _handle_run(args: argparse.Namespace) -> int:
         console.print()
 
         # Determine prompts
-        if args.prompts:
-            prompts = args.prompts
-        else:
-            prompts = get_prompts(args.prompt_set)
+        prompts = args.prompts or get_prompts(args.prompt_set)
 
         console.print(
             f"Benchmarking {len(models)} model(s) with "
@@ -320,10 +320,7 @@ def _handle_run(args: argparse.Namespace) -> int:
 
     # --- Standard mode ---
     # Determine prompts
-    if args.prompts:
-        prompts = args.prompts
-    else:
-        prompts = get_prompts(args.prompt_set)
+    prompts = args.prompts or get_prompts(args.prompt_set)
 
     console.print(
         f"Benchmarking {len(models)} model(s) with "

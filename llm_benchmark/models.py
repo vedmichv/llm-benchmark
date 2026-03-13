@@ -38,10 +38,9 @@ class OllamaResponse(BaseModel):
     @classmethod
     def handle_prompt_caching(cls, data: dict) -> dict:
         """Normalize prompt_eval_count=-1 (caching) to 0 and flag it."""
-        if isinstance(data, dict):
-            if data.get("prompt_eval_count", -1) == -1:
-                data["prompt_eval_count"] = 0
-                data["prompt_cached"] = True
+        if isinstance(data, dict) and data.get("prompt_eval_count", -1) == -1:
+            data["prompt_eval_count"] = 0
+            data["prompt_cached"] = True
         return data
 
 

@@ -21,7 +21,6 @@ import ollama
 from llm_benchmark.config import (
     DEFAULT_CONCURRENT,
     DEFAULT_TIMEOUT,
-    DEFAULT_WARMUP_PROMPT,
     get_console,
 )
 from llm_benchmark.models import (
@@ -30,7 +29,7 @@ from llm_benchmark.models import (
     OllamaResponse,
     _ns_to_sec,
 )
-from llm_benchmark.runner import warmup_model, unload_model
+from llm_benchmark.runner import warmup_model
 
 
 def auto_detect_concurrency(

@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import json
-from io import StringIO
 from pathlib import Path
 
 import pytest
-from rich.console import Console
 
 
 def _make_sample_results(models_data: list[dict]) -> dict:
