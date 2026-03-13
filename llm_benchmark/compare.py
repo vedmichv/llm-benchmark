@@ -98,6 +98,11 @@ def compare_results(
         for model in results.get("models", []):
             all_models.add(model["model"])
 
+    # Track per-metric winners across all models for overall summary
+    is_two_file = len(run_labels) == 2
+    overall_wins: dict[str, int] = {label: 0 for label in run_labels}
+    total_comparisons = 0
+
     # Build comparison table for each model
     for model_name in sorted(all_models):
         table = Table(title=model_name, show_header=True)
@@ -106,6 +111,8 @@ def compare_results(
             table.add_column(label, justify="right")
         if len(run_labels) >= 2:
             table.add_column("Difference", justify="right")
+        if is_two_file:
+            table.add_column("Winner", justify="center")
 
         # Collect model stats
         model_stats = []
@@ -138,12 +145,38 @@ def compare_results(
             ):
                 diff = values[-1] - values[0]
                 pct = diff / values[0] * 100
-                color = "green" if diff > 0 else "red" if diff < 0 else "white"
-                row.append(
-                    f"[{color}]{diff:+.2f} ({pct:+.1f}%)[/{color}]"
-                )
+                if diff > 0:
+                    row.append(
+                        f"[green]\u2191 {diff:+.2f} ({pct:+.1f}%)[/green]"
+                    )
+                elif diff < 0:
+                    row.append(
+                        f"[red]\u2193 {diff:+.2f} ({pct:+.1f}%)[/red]"
+                    )
+                else:
+                    row.append("[white]= 0.00 (0.0%)[/white]")
             elif len(run_labels) >= 2:
                 row.append("-")
+
+            # Winner column (only for 2-file comparisons)
+            if is_two_file:
+                if (
+                    len(values) >= 2
+                    and all(v is not None for v in values)
+                ):
+                    if values[1] > values[0]:
+                        row.append(f"[bold]{run_labels[1]}[/bold]")
+                        overall_wins[run_labels[1]] += 1
+                        total_comparisons += 1
+                    elif values[0] > values[1]:
+                        row.append(f"[bold]{run_labels[0]}[/bold]")
+                        overall_wins[run_labels[0]] += 1
+                        total_comparisons += 1
+                    else:
+                        row.append("Tie")
+                        total_comparisons += 1
+                else:
+                    row.append("-")
 
             table.add_row(*row)
 
@@ -151,7 +184,7 @@ def compare_results(
         console.print()
 
     # Summary for 2-file comparison
-    if len(results_list) == 2:
+    if is_two_file:
         faster = slower = unchanged = 0
         for model_name in all_models:
             stats = []
@@ -178,3 +211,14 @@ def compare_results(
         console.print(f"  Faster: [green]{faster}[/green] models")
         console.print(f"  Slower: [red]{slower}[/red] models")
         console.print(f"  Unchanged: {unchanged} models")
+
+        # Overall winner declaration
+        if total_comparisons > 0:
+            winner_label = max(overall_wins, key=overall_wins.get)  # type: ignore[arg-type]
+            winner_count = overall_wins[winner_label]
+            if winner_count > 0:
+                console.print()
+                console.print(
+                    f"  Overall: [bold]{winner_label}[/bold] was faster in "
+                    f"{winner_count}/{total_comparisons} comparisons"
+                )
