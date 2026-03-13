@@ -43,8 +43,8 @@
 
 - [x] **QUAL-01**: Single consolidated benchmark module (no benchmark.py vs extended_benchmark.py confusion)
 - [x] **QUAL-02**: Python package structure (llm_benchmark/ with submodules)
-- [ ] **QUAL-03**: Unit tests with mocked Ollama for core functions (>60% coverage)
-- [ ] **QUAL-04**: GitHub Actions CI running lint (ruff) + compile check + unit tests
+- [x] **QUAL-03**: Unit tests with mocked Ollama for core functions (>60% coverage)
+- [x] **QUAL-04**: GitHub Actions CI running lint (ruff) + compile check + unit tests
 - [x] **QUAL-05**: Python >=3.10 requirement (Pydantic 2.x + tenacity compatibility)
 
 ## v2 Requirements
@@ -103,8 +103,8 @@
 | UX-03 | Phase 4 | Complete |
 | UX-05 | Phase 4 | Complete |
 | UX-06 | Phase 4 | Complete |
-| QUAL-03 | Phase 4 | Pending |
-| QUAL-04 | Phase 4 | Pending |
+| QUAL-03 | Phase 4 | Complete |
+| QUAL-04 | Phase 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 27 total
