@@ -77,6 +77,7 @@ def _build_namespace(
         concurrent=None,
         sweep=False,
         debug=False,
+        num_ctx=None,
     )
 
 

@@ -74,6 +74,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"Per-run timeout in seconds (default: {DEFAULT_TIMEOUT})",
     )
     run_parser.add_argument(
+        "--num-ctx",
+        type=int,
+        default=None,
+        help="Context window size (default: auto-detect per model)",
+    )
+    run_parser.add_argument(
         "--skip-warmup",
         action="store_true",
         help="Skip model warmup before benchmarking",
@@ -345,6 +351,7 @@ def _handle_run(args: argparse.Namespace) -> int:
                     runs_per_prompt=args.runs_per_prompt,
                     skip_warmup=args.skip_warmup,
                     max_retries=args.max_retries,
+                    num_ctx=getattr(args, "num_ctx", None),
                 )
                 all_summaries.append(summary)
 

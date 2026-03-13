@@ -128,6 +128,53 @@ def _is_retryable(exc: BaseException) -> bool:
     return False
 
 
+def detect_num_ctx(model_name: str) -> int:
+    """Auto-detect a reasonable num_ctx for a model.
+
+    Queries Ollama for the model's max context length and picks a sensible
+    default based on model capabilities. Thinking models get larger context
+    to accommodate chain-of-thought reasoning.
+
+    Returns:
+        Recommended num_ctx value (4096-32768).
+    """
+    console = get_console()
+    try:
+        info = ollama.show(model_name)
+        model_dump = info.model_dump() if hasattr(info, "model_dump") else vars(info)
+        model_info = model_dump.get("modelinfo", model_dump.get("model_info", {}))
+
+        max_ctx = None
+        for key, val in model_info.items():
+            if "context_length" in key:
+                max_ctx = int(val)
+                break
+
+        if max_ctx is None:
+            return 4096
+
+        # Check if thinking model (qwen3.5, deepseek-r1, etc.)
+        is_thinking = any(
+            t in model_name.lower()
+            for t in ["qwen3.5", "deepseek-r1", "deepseek-r2"]
+        )
+
+        if is_thinking:
+            # Thinking models need more context for chain-of-thought
+            target = min(max_ctx, 32768)
+        else:
+            target = min(max_ctx, 8192)
+
+        console.print(
+            f"  [dim]Context window: {target:,} tokens"
+            f"{' (thinking model)' if is_thinking else ''}[/dim]"
+        )
+        return target
+
+    except Exception:
+        return 4096
+
+
 def unload_model(model_name: str) -> bool:
     """Unload a model from GPU memory via Ollama API.
 
@@ -207,6 +254,7 @@ def run_single_benchmark(
     verbose: bool = False,
     timeout: int = DEFAULT_TIMEOUT,
     max_retries: int = DEFAULT_MAX_RETRIES,
+    num_ctx: int | None = None,
 ) -> BenchmarkResult:
     """Execute a single benchmark: one prompt against one model.
 
@@ -219,12 +267,14 @@ def run_single_benchmark(
         verbose: If True, stream and display response chunks.
         timeout: Timeout in seconds for the benchmark run.
         max_retries: Maximum retry attempts (0 to disable retries).
+        num_ctx: Context window size (None = Ollama default, typically 2048).
 
     Returns:
         BenchmarkResult with success=True on success, or
         success=False with error message on failure.
     """
     console = get_console()
+    options = {"num_ctx": num_ctx} if num_ctx else {}
 
     def _run_benchmark() -> dict:
         """Inner function executed within timeout wrapper."""
@@ -234,6 +284,7 @@ def run_single_benchmark(
                 model=model_name,
                 messages=[{"role": "user", "content": prompt}],
                 stream=True,
+                options=options,
             )
             last_chunk = None
             char_count = 0
@@ -252,6 +303,7 @@ def run_single_benchmark(
             response = ollama.chat(
                 model=model_name,
                 messages=[{"role": "user", "content": prompt}],
+                options=options,
             )
             return response
 
@@ -331,6 +383,7 @@ def benchmark_model(
     runs_per_prompt: int = 1,
     skip_warmup: bool = False,
     max_retries: int = DEFAULT_MAX_RETRIES,
+    num_ctx: int | None = None,
 ) -> ModelSummary:
     """Orchestrate benchmarking a single model across all prompts.
 
@@ -349,6 +402,10 @@ def benchmark_model(
     console = get_console()
     all_results: list[BenchmarkResult] = []
     _cache_explanation_shown = False
+
+    # Auto-detect optimal context window if not explicitly set
+    if num_ctx is None:
+        num_ctx = detect_num_ctx(model_name)
 
     # Warmup: pre-load model to exclude load time from measurements
     if not skip_warmup:
@@ -374,6 +431,7 @@ def benchmark_model(
                 verbose=verbose,
                 timeout=timeout,
                 max_retries=max_retries,
+                num_ctx=num_ctx,
             )
             all_results.append(result)
 
