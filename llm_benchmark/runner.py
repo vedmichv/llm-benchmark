@@ -114,12 +114,15 @@ def warmup_model(model_name: str, timeout: int = DEFAULT_TIMEOUT) -> bool:
 def _is_retryable(exc: BaseException) -> bool:
     """Return True if the exception is transient and should be retried.
 
-    Retryable: ConnectionError, TimeoutError, ollama.RequestError,
+    Retryable: ConnectionError, ollama.RequestError,
     and ollama.ResponseError with status_code >= 500.
 
-    Non-retryable: ollama.ResponseError with status_code < 500 (e.g. 404).
+    Non-retryable: TimeoutError (retrying a 200s timeout wastes minutes),
+    ollama.ResponseError with status_code < 500 (e.g. 404).
     """
-    if isinstance(exc, (ConnectionError, TimeoutError)):
+    if isinstance(exc, TimeoutError):
+        return False
+    if isinstance(exc, ConnectionError):
         return True
     if isinstance(exc, _RequestError):
         return True
@@ -360,6 +363,8 @@ def run_single_benchmark(
         return _parse_response(raw_response)
 
     except TimeoutError:
+        # Unload and reload to reset Ollama state after timeout
+        unload_model(model_name)
         return BenchmarkResult(
             model=model_name,
             prompt=prompt,

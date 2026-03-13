@@ -266,20 +266,19 @@ class TestRetryLogic:
         assert result.success is True
         assert mock_ollama.chat.call_count == 2
 
+    @patch("llm_benchmark.runner.unload_model")
     @patch("llm_benchmark.runner.ollama")
-    def test_retries_on_timeout_error(self, mock_ollama, sample_ollama_response_dict):
-        """run_single_benchmark retries on TimeoutError."""
+    def test_no_retry_on_timeout_error(self, mock_ollama, mock_unload, sample_ollama_response_dict):
+        """run_single_benchmark does NOT retry on TimeoutError (wastes minutes)."""
         from llm_benchmark.runner import run_single_benchmark
 
-        mock_response = MagicMock()
-        mock_response.model_dump.return_value = sample_ollama_response_dict
-        mock_ollama.chat.side_effect = [
-            TimeoutError("timed out"),
-            mock_response,
-        ]
+        mock_ollama.chat.side_effect = TimeoutError("timed out")
 
         result = run_single_benchmark("llama3.2:1b", "test", max_retries=3)
-        assert result.success is True
+        assert result.success is False
+        assert "Timeout" in result.error
+        # Should unload model to reset state after timeout
+        mock_unload.assert_called_once_with("llama3.2:1b")
 
     @patch("llm_benchmark.runner.ollama")
     def test_retries_on_request_error(self, mock_ollama, sample_ollama_response_dict):
