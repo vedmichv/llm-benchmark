@@ -8,6 +8,8 @@ per user decision: "don't gatekeep."
 from __future__ import annotations
 
 import platform
+import shutil
+import subprocess
 import sys
 
 import ollama
@@ -35,11 +37,11 @@ def _get_system_ram_gb() -> float:
             )
             if result.returncode == 0 and result.stdout.strip():
                 return int(result.stdout.strip()) / (1024**3)
-        except (Exception,):
+        except Exception:
             pass
     elif current_os == "Linux":
         try:
-            with open("/proc/meminfo", "r") as f:
+            with open("/proc/meminfo") as f:
                 for line in f:
                     if "MemTotal" in line:
                         ram_kb = int(line.split()[1])
@@ -64,10 +66,54 @@ def _get_system_ram_gb() -> float:
                 ]
                 if lines:
                     return int(lines[0]) / (1024**3)
-        except (Exception,):
+        except Exception:
             pass
 
     return 0.0
+
+
+def check_ollama_installed() -> bool:
+    """Check if the Ollama binary is installed on the system.
+
+    Uses shutil.which to locate the ollama binary. If not found, offers
+    platform-specific installation with an interactive prompt.
+
+    Returns:
+        True if Ollama is installed (or was successfully installed), False otherwise.
+    """
+    if shutil.which("ollama"):
+        return True
+
+    console = get_console()
+    os_name = platform.system()
+
+    console.print("[yellow]Ollama is not installed.[/yellow]")
+    console.print()
+
+    if os_name == "Windows":
+        install_cmd = "irm https://ollama.com/install.ps1 | iex"
+    else:
+        install_cmd = "curl -fsSL https://ollama.com/install.sh | sh"
+
+    console.print(f"  Install command: [cyan]{install_cmd}[/cyan]")
+    console.print()
+
+    try:
+        answer = input("Install Ollama now? (y/N) ")
+    except (EOFError, KeyboardInterrupt):
+        answer = "n"
+
+    if answer.strip().lower() == "y":
+        subprocess.run(install_cmd, shell=True)
+        if shutil.which("ollama"):
+            console.print("[green]Ollama installed successfully![/green]")
+            return True
+        else:
+            console.print("[red]Installation may have failed. Ollama binary not found.[/red]")
+            return False
+
+    console.print("[dim]Install Ollama manually: https://ollama.com/download[/dim]")
+    return False
 
 
 def check_ollama_connectivity() -> bool:
@@ -175,6 +221,10 @@ def run_preflight_checks(
     Raises:
         SystemExit: If Ollama is unreachable or no models are found.
     """
+    # 0. Installation check (blocking)
+    if not check_ollama_installed():
+        sys.exit(1)
+
     # 1. Connectivity check (blocking)
     if not check_ollama_connectivity():
         sys.exit(1)
