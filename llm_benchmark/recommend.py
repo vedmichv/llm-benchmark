@@ -44,6 +44,7 @@ TIERED_MODELS: list[dict[str, str]] = [
     {"name": "gemma3:12b", "size_label": "12B", "tier": "large", "description": "Google's larger model"},
     {"name": "deepseek-r1:14b", "size_label": "14B", "tier": "large", "description": "Reasoning-focused model"},
     # --- xl (64 GB+) ---
+    {"name": "nemotron-3-super", "size_label": "120B MoE/12B active", "tier": "xl", "description": "NVIDIA hybrid Mamba-Transformer (new!)"},
     {"name": "qwen3.5:35b", "size_label": "35B", "tier": "xl", "description": "Qwen 3.5 large (arena top-20)"},
     {"name": "llama3.3:70b", "size_label": "70B", "tier": "xl", "description": "Meta flagship 70B model"},
     {"name": "qwen3:32b", "size_label": "32B", "tier": "xl", "description": "Qwen 3 thinking model"},
