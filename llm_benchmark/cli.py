@@ -30,7 +30,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Show full stack traces on error",
     )
 
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command", required=False)
 
     # run subcommand
     run_parser = subparsers.add_parser("run", help="Run benchmarks")
@@ -205,6 +205,23 @@ def _handle_run(args: argparse.Namespace) -> int:
             sweep_results.append(result)
             console.print()
 
+        # Bar chart for sweep best configs
+        if sweep_results:
+            from llm_benchmark.display import render_bar_chart as _render_sweep_chart
+
+            sweep_rankings = sorted(
+                [
+                    (sr.model, sr.best_config.response_ts)
+                    for sr in sweep_results
+                    if sr.best_config is not None
+                ],
+                key=lambda x: x[1],
+                reverse=True,
+            )
+            if sweep_rankings:
+                _render_sweep_chart(sweep_rankings)
+                console.print()
+
         if sweep_results:
             json_path = export_sweep_json(sweep_results, system_info)
             csv_path = export_sweep_csv(sweep_results, system_info)
@@ -271,6 +288,23 @@ def _handle_run(args: argparse.Namespace) -> int:
             unload_model(model_name)
             console.print()
 
+        # Bar chart for concurrent mode
+        if all_batch_results:
+            from llm_benchmark.display import render_bar_chart as _render_conc_chart
+
+            conc_rankings = []
+            for batches in all_batch_results:
+                if batches:
+                    model_name = batches[0].model
+                    avg_agg = (
+                        sum(b.aggregate_throughput_ts for b in batches) / len(batches)
+                    )
+                    conc_rankings.append((model_name, avg_agg))
+            conc_rankings.sort(key=lambda x: x[1], reverse=True)
+            if conc_rankings:
+                _render_conc_chart(conc_rankings, metric_label="t/s (aggregate)")
+                console.print()
+
         if all_batch_results:
             json_path = export_concurrent_json(all_batch_results, system_info)
             csv_path = export_concurrent_csv(all_batch_results, system_info)
@@ -300,37 +334,56 @@ def _handle_run(args: argparse.Namespace) -> int:
     # Run benchmarks
     all_summaries = []
 
-    for idx, model in enumerate(models):
-        model_name = model.model
-        console.rule(f"[bold]{model_name}[/bold] ({idx + 1}/{len(models)})")
+    try:
+        for idx, model in enumerate(models):
+            model_name = model.model
+            console.rule(f"[bold]{model_name}[/bold] ({idx + 1}/{len(models)})")
 
-        try:
-            summary = benchmark_model(
-                model_name=model_name,
-                prompts=prompts,
-                verbose=args.verbose,
-                timeout=args.timeout,
-                runs_per_prompt=args.runs_per_prompt,
-                skip_warmup=args.skip_warmup,
-                max_retries=args.max_retries,
-            )
-            all_summaries.append(summary)
+            try:
+                summary = benchmark_model(
+                    model_name=model_name,
+                    prompts=prompts,
+                    verbose=args.verbose,
+                    timeout=args.timeout,
+                    runs_per_prompt=args.runs_per_prompt,
+                    skip_warmup=args.skip_warmup,
+                    max_retries=args.max_retries,
+                )
+                all_summaries.append(summary)
 
-            console.print(
-                f"  [green]Average: {summary.avg_response_ts:.1f} t/s[/green]"
-            )
-        except Exception as exc:
-            console.print(f"  [red]Error benchmarking {model_name}: {exc}[/red]")
-            if idx < len(models) - 1:
-                try:
-                    answer = input("Continue with remaining models? [Y/n] ")
-                    if answer.strip().lower() == "n":
+                console.print(
+                    f"  [green]Average: {summary.avg_response_ts:.1f} t/s[/green]"
+                )
+            except Exception as exc:
+                console.print(
+                    f"  [red]Error benchmarking {model_name}: {exc}[/red]"
+                )
+                if idx < len(models) - 1:
+                    try:
+                        answer = input("Continue with remaining models? [Y/n] ")
+                        if answer.strip().lower() == "n":
+                            break
+                    except (EOFError, KeyboardInterrupt):
                         break
-                except (EOFError, KeyboardInterrupt):
-                    break
 
-        # Unload model after benchmarking
-        unload_model(model_name)
+            # Unload model after benchmarking
+            unload_model(model_name)
+            console.print()
+    except KeyboardInterrupt:
+        console.print(
+            "\n[yellow]Benchmark interrupted. Saving partial results...[/yellow]"
+        )
+
+    # Bar chart display
+    if all_summaries:
+        from llm_benchmark.display import render_bar_chart
+
+        rankings = sorted(
+            [(s.model, s.avg_response_ts) for s in all_summaries],
+            key=lambda x: x[1],
+            reverse=True,
+        )
+        render_bar_chart(rankings)
         console.print()
 
     # Export results
@@ -405,8 +458,24 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         Exit code (0 for success, 1 for failure).
     """
+    args_list = argv if argv is not None else sys.argv[1:]
+
+    # No-args: launch interactive menu
+    if not args_list:
+        try:
+            from llm_benchmark.menu import run_interactive_menu
+            from llm_benchmark.preflight import run_preflight_checks
+
+            models = run_preflight_checks()
+            args = run_interactive_menu(models)
+            set_debug(False)
+            return _handle_run(args)
+        except KeyboardInterrupt:
+            get_console().print("\n[yellow]Interrupted.[/yellow]")
+            return 0
+
     parser = _build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_list)
 
     set_debug(args.debug)
 
