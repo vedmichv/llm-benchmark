@@ -162,11 +162,7 @@ def detect_num_ctx(model_name: str) -> int:
             for t in ["qwen3.5", "deepseek-r1", "deepseek-r2"]
         )
 
-        if is_thinking:
-            # Thinking models need more context for chain-of-thought
-            target = min(max_ctx, 32768)
-        else:
-            target = min(max_ctx, 8192)
+        target = min(max_ctx, 32768) if is_thinking else min(max_ctx, 8192)
 
         console.print(
             f"  [dim]Context window: {target:,} tokens"
@@ -466,8 +462,8 @@ def benchmark_model(
                         "on complex prompts.[/dim]"
                     )
                     console.print(
-                        f"    [dim]Tip: increase with --timeout 600 "
-                        f"or use --prompt-set small[/dim]"
+                        "    [dim]Tip: increase with --timeout 600 "
+                        "or use --prompt-set small[/dim]"
                     )
 
     # Warn if all successful results are cached
