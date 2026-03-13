@@ -86,22 +86,34 @@ curl -fsSL https://ollama.com/install.sh | sh
 irm https://ollama.com/install.ps1 | iex
 ```
 
-### 2. Clone and run
+### 2. Clone and install
 
 ```bash
 git clone https://github.com/vedmichv/llm-benchmark.git
 cd llm-benchmark
 uv sync
+```
+
+### 3. Download recommended models
+
+```bash
+uv run python -m llm_benchmark --recommend
+```
+
+The tool detects your RAM (+ GPU VRAM on discrete GPUs), shows models that fit your hardware grouped by tier, and lets you pick which ones to download. Already installed models are marked `[installed]`.
+
+### 4. Run benchmark
+
+```bash
 uv run python -m llm_benchmark
 ```
 
-That's it. The interactive menu will:
+The interactive menu will:
 - Check Ollama is installed and running
-- Recommend models based on your RAM and offer to download them
-- Let you pick a benchmark mode
-- Show results with a ranked bar chart
+- Let you pick a benchmark mode (Quick test / Standard / Full / Custom)
+- Show results with a ranked bar chart and recommendation
 
-### 3. Check your results
+### 5. Check your results
 
 After a benchmark completes, results are saved to `results/`:
 
