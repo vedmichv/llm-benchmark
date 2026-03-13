@@ -23,7 +23,7 @@ class TestRunSubcommand:
         assert args.prompt_set == "medium"
         assert args.prompts is None
         assert args.runs_per_prompt == 2
-        assert args.timeout == 300
+        assert args.timeout == 200
         assert args.skip_warmup is False
         assert args.max_retries == 3
 

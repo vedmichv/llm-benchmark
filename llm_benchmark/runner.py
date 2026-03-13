@@ -397,6 +397,15 @@ def benchmark_model(
                     _cache_explanation_shown = True
             elif not result.success:
                 console.print(f"    [red]Failed: {result.error}[/red]")
+                if "Timeout" in (result.error or ""):
+                    console.print(
+                        "    [dim]This is normal for thinking models (qwen3.5, deepseek-r1) "
+                        "on complex prompts.[/dim]"
+                    )
+                    console.print(
+                        f"    [dim]Tip: increase with --timeout 600 "
+                        f"or use --prompt-set small[/dim]"
+                    )
 
     # Warn if all successful results are cached
     successful = [r for r in all_results if r.success]
