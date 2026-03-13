@@ -171,3 +171,64 @@ class TestAnalyzeResults:
 
         # Should not crash
         analyze_results(str(sample_results_json), detail=True)
+
+
+# ── Task 2: Compare enhancement tests ──────────────────────────────
+
+
+def _write_results_file(tmp_path: Path, name: str, models_data: list[dict]) -> Path:
+    """Write a results JSON file to tmp_path."""
+    fp = tmp_path / name
+    fp.write_text(json.dumps(_make_sample_results(models_data)))
+    return fp
+
+
+class TestCompareArrows:
+    """Test enhanced compare with arrows and winner column."""
+
+    def test_compare_arrows(self, tmp_path: Path) -> None:
+        """Compare two files; verify arrows don't crash."""
+        from llm_benchmark.compare import compare_results
+
+        f1 = _write_results_file(tmp_path, "run1.json", [
+            _make_model("model-a:1b", response_ts=40.0, total_ts=35.0, prompt_eval_ts=100.0),
+        ])
+        f2 = _write_results_file(tmp_path, "run2.json", [
+            _make_model("model-a:1b", response_ts=50.0, total_ts=42.0, prompt_eval_ts=120.0),
+        ])
+        # Should complete without exception and show arrows
+        compare_results([str(f1), str(f2)])
+
+    def test_compare_backward_compat(self, tmp_path: Path) -> None:
+        """JSON without 'mode' field should not crash."""
+        from llm_benchmark.compare import compare_results
+
+        # Explicitly no "mode" field in results
+        data1 = _make_sample_results([
+            _make_model("model-a:1b", response_ts=40.0, total_ts=35.0, prompt_eval_ts=100.0),
+        ])
+        data2 = _make_sample_results([
+            _make_model("model-a:1b", response_ts=45.0, total_ts=38.0, prompt_eval_ts=110.0),
+        ])
+        # Ensure no "mode" key anywhere
+        assert "mode" not in data1
+        assert "mode" not in data2
+
+        f1 = tmp_path / "compat1.json"
+        f2 = tmp_path / "compat2.json"
+        f1.write_text(json.dumps(data1))
+        f2.write_text(json.dumps(data2))
+
+        compare_results([str(f1), str(f2)])
+
+    def test_compare_winner(self, tmp_path: Path) -> None:
+        """Run2 is clearly faster; compare completes with winner info."""
+        from llm_benchmark.compare import compare_results
+
+        f1 = _write_results_file(tmp_path, "slow.json", [
+            _make_model("model-a:1b", response_ts=20.0, total_ts=18.0, prompt_eval_ts=50.0),
+        ])
+        f2 = _write_results_file(tmp_path, "fast.json", [
+            _make_model("model-a:1b", response_ts=60.0, total_ts=55.0, prompt_eval_ts=150.0),
+        ])
+        compare_results([str(f1), str(f2)])
