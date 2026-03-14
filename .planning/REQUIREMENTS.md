@@ -61,8 +61,8 @@
 
 - [ ] **BEND-01**: LlamaCppBackend connects to llama-server via httpx, reads native /completion timings
 - [ ] **BEND-02**: LMStudioBackend connects to LM Studio via httpx, reads native /api/v1/ stats
-- [ ] **BEND-03**: Auto-detect installed backends by checking binary presence (shutil.which)
-- [ ] **BEND-04**: Auto-start backends if installed but not running (ollama serve, llama-server, lms server start)
+- [x] **BEND-03**: Auto-detect installed backends by checking binary presence (shutil.which)
+- [x] **BEND-04**: Auto-start backends if installed but not running (ollama serve, llama-server, lms server start)
 - [ ] **BEND-05**: Backend-specific preflight checks (non-fatal: skip unavailable backends gracefully)
 
 ### CLI Integration (CLI)
@@ -84,8 +84,8 @@
 ### Cross-Platform (PLAT)
 
 - [ ] **PLAT-01**: All backends work on macOS (Apple Silicon Metal), Windows (CUDA/CPU), Linux (CUDA/CPU)
-- [ ] **PLAT-02**: llama.cpp install detection and auto-start per OS (Homebrew/winget/apt)
-- [ ] **PLAT-03**: LM Studio install detection and auto-start per OS (no MLX on Linux noted)
+- [x] **PLAT-02**: llama.cpp install detection and auto-start per OS (Homebrew/winget/apt)
+- [x] **PLAT-03**: LM Studio install detection and auto-start per OS (no MLX on Linux noted)
 
 ### Documentation (DOC)
 
@@ -158,8 +158,8 @@
 | BACK-05 | Phase 5 | Complete |
 | BEND-01 | Phase 6 | Pending |
 | BEND-02 | Phase 6 | Pending |
-| BEND-03 | Phase 6 | Pending |
-| BEND-04 | Phase 6 | Pending |
+| BEND-03 | Phase 6 | Complete |
+| BEND-04 | Phase 6 | Complete |
 | BEND-05 | Phase 6 | Pending |
 | CLI-01 | Phase 6 | Pending |
 | CLI-02 | Phase 6 | Pending |
@@ -167,8 +167,8 @@
 | CLI-04 | Phase 6 | Pending |
 | CLI-05 | Phase 6 | Pending |
 | PLAT-01 | Phase 6 | Pending |
-| PLAT-02 | Phase 6 | Pending |
-| PLAT-03 | Phase 6 | Pending |
+| PLAT-02 | Phase 6 | Complete |
+| PLAT-03 | Phase 6 | Complete |
 | COMP-01 | Phase 7 | Pending |
 | COMP-02 | Phase 7 | Pending |
 | COMP-03 | Phase 7 | Pending |

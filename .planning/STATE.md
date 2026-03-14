@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Multi-Backend Benchmark
-status: completed
-stopped_at: Phase 6 context gathered
-last_updated: "2026-03-14T15:33:59.208Z"
-last_activity: 2026-03-14 — 05-03 Final Backend migration complete
+status: executing
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-03-14T16:54:42.207Z"
+last_activity: 2026-03-14 — 06-02 Backend detection and auto-start
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_plans: 8
+  completed_plans: 4
+  percent: 80
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-14)
 
 **Core value:** Student clones repo, runs one command, gets clear answer about their hardware's LLM capabilities.
-**Current focus:** Phase 5 — Backend Abstraction (v2.0)
+**Current focus:** Phase 6 — New Backends (v2.0)
 
 ## Current Position
 
-Phase: 5 of 7 (Backend Abstraction) -- COMPLETE
-Plan: 3 of 3 complete
-Status: Phase Complete
-Last activity: 2026-03-14 — 05-03 Final Backend migration complete
+Phase: 6 of 7 (New Backends) -- IN PROGRESS
+Plan: 2 of 5 complete
+Status: Executing
+Last activity: 2026-03-14 — 06-02 Backend detection and auto-start
 
-Progress: [██████████] 100% (v2.0 Phase 5)
+Progress: [████████░░] 80% (v2.0 Phase 6)
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Progress: [██████████] 100% (v2.0 Phase 5)
 **Recent Trend:**
 - v1.0 plans averaged 6min each
 - Trend: Stable
+| Phase 06 P02 | 2min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,9 @@ Recent decisions affecting current work:
 - [05-03]: ThreadPoolExecutor replaces asyncio for concurrent requests (Backend.chat is sync)
 - [05-03]: get_model_layers uses duck-typing -- not in Protocol, backend-specific
 - [05-03]: All isinstance backward-compat checks removed -- models always dicts
+- [06-02]: httpx imported at module level for clean test mocking (not locally in function)
+- [06-02]: detect_backends skips port probe when binary not installed (running=False)
+- [Phase 06]: httpx imported at module level for clean test mocking
 
 ### Pending Todos
 
@@ -87,6 +91,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T15:33:59.205Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/phases/06-new-backends/06-CONTEXT.md
+Last session: 2026-03-14T16:54:42.204Z
+Stopped at: Completed 06-02-PLAN.md
+Resume file: None
