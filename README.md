@@ -126,6 +126,106 @@ results/
 
 The Markdown report includes system info, rankings with bar chart, and a recommendation — paste it into GitHub, Discord, or Slack.
 
+## Multi-Backend Setup
+
+LLM Benchmark supports three local inference backends. You can install one or all of them, then compare performance side-by-side.
+
+| Backend | Default Port | Best For |
+|---------|-------------|----------|
+| Ollama | 11434 | Easiest setup, model management built-in |
+| llama.cpp | 8080 | Raw performance, direct GGUF support |
+| LM Studio | 1234 | GUI-based, easy model browsing |
+
+### macOS (Apple Silicon)
+
+```bash
+# Ollama
+brew install ollama && ollama serve
+ollama pull llama3.2:1b
+
+# llama.cpp
+brew install llama.cpp
+# Download a GGUF model from Hugging Face
+llama-server --model path/to/model.gguf
+
+# LM Studio
+# Download from https://lmstudio.ai
+lms server start
+```
+
+### Windows
+
+```bash
+# Ollama
+winget install Ollama.Ollama
+
+# llama.cpp
+winget install llama-cpp
+
+# LM Studio
+# Download from https://lmstudio.ai
+```
+
+### Linux
+
+```bash
+# Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# llama.cpp
+sudo apt install llama.cpp  # or build from source
+
+# LM Studio
+# Download AppImage from https://lmstudio.ai
+```
+
+### Verify installation
+
+```bash
+# Ollama
+ollama --version
+
+# llama.cpp
+llama-server --version
+
+# LM Studio
+lms status
+```
+
+## Cross-Backend Comparison
+
+Compare token throughput across backends to find the fastest one for your hardware:
+
+```bash
+# Compare all detected backends
+uv run python -m llm_benchmark run --backend all
+
+# Compare specific backends
+uv run python -m llm_benchmark run --backend ollama llama-cpp
+
+# Or use the interactive menu (option 5)
+uv run python -m llm_benchmark
+```
+
+### Example output (Apple Silicon M3 Max)
+
+```
+Cross-Backend Comparison
+
+Backends: ollama, llama-cpp
+Models:   llama3.2:1b, llama3.2:3b
+
+                    Response Generation (tokens/sec)
+ Model         │ ollama   │ llama-cpp │ Winner
+───────────────┼──────────┼───────────┼──────────────
+ llama3.2:1b   │  45.2    │  62.8     │ llama-cpp
+ llama3.2:3b   │  28.4    │  41.1     │ llama-cpp
+
+Fastest backend: llama-cpp (2/2 models)
+```
+
+> **Note:** Results vary by hardware. Run your own comparison to find the fastest backend for your setup. On Apple Silicon, llama.cpp is typically ~1.4x faster than Ollama due to its optimized Metal backend.
+
 ## Benchmark Modes
 
 ### Interactive menu (no-args)
