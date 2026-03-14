@@ -187,6 +187,37 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _print_failure_summary(
+    failures: list[tuple[str, str]], backend_name: str
+) -> None:
+    """Print a summary table of models that failed during benchmarking."""
+    from rich.table import Table
+
+    from llm_benchmark.runner import get_known_issue_hint
+
+    console = get_console()
+    console.print()
+    console.rule("[bold red]Failure Summary[/bold red]")
+    console.print()
+
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("Model", style="bold")
+    table.add_column("Error")
+    table.add_column("Hint", style="dim")
+
+    for model_name, error_msg in failures:
+        hint = get_known_issue_hint(backend_name, error_msg) or ""
+        # Truncate long error messages for display
+        display_error = error_msg[:80] + "..." if len(error_msg) > 80 else error_msg
+        table.add_row(model_name, display_error, hint)
+
+    console.print(table)
+    console.print(
+        f"  [yellow]{len(failures)} model(s) skipped due to errors[/yellow]"
+    )
+    console.print()
+
+
 def _handle_run(args: argparse.Namespace) -> int:
     """Handle the 'run' subcommand."""
     from llm_benchmark.backends import create_backend
@@ -369,6 +400,7 @@ def _handle_run(args: argparse.Namespace) -> int:
 
     # Run benchmarks
     all_summaries = []
+    failures: list[tuple[str, str]] = []
 
     try:
         for idx, model in enumerate(models):
@@ -393,16 +425,12 @@ def _handle_run(args: argparse.Namespace) -> int:
                     f"  [green]Average: {summary.avg_response_ts:.1f} t/s[/green]"
                 )
             except Exception as exc:
+                error_msg = str(exc)
                 console.print(
-                    f"  [red]Error benchmarking {model_name}: {exc}[/red]"
+                    f"  [red]Error benchmarking {model_name}: {error_msg}[/red]"
                 )
-                if idx < len(models) - 1:
-                    try:
-                        answer = input("Continue with remaining models? [Y/n] ")
-                        if answer.strip().lower() == "n":
-                            break
-                    except (EOFError, KeyboardInterrupt):
-                        break
+                failures.append((model_name, error_msg))
+                # Auto-skip: continue with remaining models
 
             # Unload model after benchmarking
             unload_model(backend, model_name)
@@ -411,6 +439,10 @@ def _handle_run(args: argparse.Namespace) -> int:
         console.print(
             "\n[yellow]Benchmark interrupted. Saving partial results...[/yellow]"
         )
+
+    # Failure summary
+    if failures:
+        _print_failure_summary(failures, backend.name)
 
     # Bar chart display
     if all_summaries:
@@ -529,10 +561,16 @@ def main(argv: list[str] | None = None) -> int:
     if not args_list:
         try:
             from llm_benchmark.backends import create_backend
-            from llm_benchmark.menu import run_interactive_menu
+            from llm_benchmark.menu import (
+                run_interactive_menu,
+                select_backend_interactive,
+            )
             from llm_benchmark.preflight import run_preflight_checks
 
-            backend = create_backend()
+            backend_name, port, model_path = select_backend_interactive()
+            backend = create_backend(backend_name, port=port)
+            if model_path is not None:
+                backend._model_path = model_path  # type: ignore[attr-defined]
             models = run_preflight_checks(backend=backend)
             args = run_interactive_menu(backend, models)
             set_debug(False)
