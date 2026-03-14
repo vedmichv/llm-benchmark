@@ -109,11 +109,18 @@ class StreamResult:
         return self._response
 
 
-def create_backend(name: str = "ollama") -> Backend:
+def create_backend(
+    name: str = "ollama",
+    *,
+    host: str | None = None,
+    port: int | None = None,
+) -> Backend:
     """Factory function to create a backend instance by name.
 
     Args:
-        name: Backend identifier. Currently only "ollama" is supported.
+        name: Backend identifier ('ollama', 'llama-cpp', 'lm-studio').
+        host: Optional hostname override for the backend server.
+        port: Optional port override for the backend server.
 
     Returns:
         A Backend instance.
@@ -126,6 +133,26 @@ def create_backend(name: str = "ollama") -> Backend:
 
         return OllamaBackend()
 
+    if name == "llama-cpp":
+        from llm_benchmark.backends.llamacpp import LlamaCppBackend
+
+        kwargs: dict[str, Any] = {}
+        if host is not None:
+            kwargs["host"] = host
+        if port is not None:
+            kwargs["port"] = port
+        return LlamaCppBackend(**kwargs)
+
+    if name == "lm-studio":
+        from llm_benchmark.backends.lmstudio import LMStudioBackend
+
+        kwargs_lms: dict[str, Any] = {}
+        if host is not None:
+            kwargs_lms["host"] = host
+        if port is not None:
+            kwargs_lms["port"] = port
+        return LMStudioBackend(**kwargs_lms)
+
     raise ValueError(
-        f"Unknown backend: {name!r}. Supported backends: 'ollama'"
+        f"Unknown backend: {name!r}. Supported backends: 'ollama', 'llama-cpp', 'lm-studio'"
     )

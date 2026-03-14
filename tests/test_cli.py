@@ -166,3 +166,154 @@ class TestMaxRetries:
         parser = _build_parser()
         args = parser.parse_args(["run"])
         assert args.max_retries == 3
+
+
+class TestBackendFlag:
+    """Tests for --backend, --port, and --model-path CLI flags."""
+
+    def test_backend_default_is_ollama(self):
+        """Default backend is 'ollama' when not specified."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["run"])
+        assert args.backend == "ollama"
+
+    def test_backend_llama_cpp(self):
+        """--backend llama-cpp parses correctly."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["run", "--backend", "llama-cpp"])
+        assert args.backend == "llama-cpp"
+
+    def test_backend_lm_studio(self):
+        """--backend lm-studio parses correctly."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["run", "--backend", "lm-studio"])
+        assert args.backend == "lm-studio"
+
+    def test_backend_invalid_rejected(self):
+        """Invalid backend value rejected by argparse."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["run", "--backend", "invalid"])
+
+    def test_port_flag_parsed_as_int(self):
+        """--port flag parsed as integer."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["run", "--port", "5555"])
+        assert args.port == 5555
+
+    def test_port_default_is_none(self):
+        """Default port is None when not specified."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["run"])
+        assert args.port is None
+
+    def test_model_path_flag_parsed(self):
+        """--model-path flag parsed as string."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["run", "--model-path", "/path/to/model.gguf"])
+        assert args.model_path == "/path/to/model.gguf"
+
+    def test_model_path_default_is_none(self):
+        """Default model_path is None when not specified."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["run"])
+        assert args.model_path is None
+
+    def test_backend_and_port_combined(self):
+        """--backend lm-studio --port 5555 parses together."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["run", "--backend", "lm-studio", "--port", "5555"])
+        assert args.backend == "lm-studio"
+        assert args.port == 5555
+
+    def test_info_backend_flag(self):
+        """Info subcommand accepts --backend flag."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["info", "--backend", "llama-cpp"])
+        assert args.backend == "llama-cpp"
+
+    def test_info_backend_default(self):
+        """Info subcommand defaults to ollama backend."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["info"])
+        assert args.backend == "ollama"
+
+
+class TestCreateBackendFactory:
+    """Tests for create_backend() factory function."""
+
+    def test_create_backend_ollama(self):
+        """create_backend('ollama') returns OllamaBackend."""
+        from llm_benchmark.backends import create_backend
+        from llm_benchmark.backends.ollama import OllamaBackend
+
+        backend = create_backend("ollama")
+        assert isinstance(backend, OllamaBackend)
+
+    def test_create_backend_llama_cpp(self):
+        """create_backend('llama-cpp') returns LlamaCppBackend."""
+        from llm_benchmark.backends import create_backend
+        from llm_benchmark.backends.llamacpp import LlamaCppBackend
+
+        backend = create_backend("llama-cpp")
+        assert isinstance(backend, LlamaCppBackend)
+
+    def test_create_backend_lm_studio(self):
+        """create_backend('lm-studio') returns LMStudioBackend."""
+        from llm_benchmark.backends import create_backend
+        from llm_benchmark.backends.lmstudio import LMStudioBackend
+
+        backend = create_backend("lm-studio")
+        assert isinstance(backend, LMStudioBackend)
+
+    def test_create_backend_invalid_raises(self):
+        """create_backend('invalid') raises ValueError."""
+        from llm_benchmark.backends import create_backend
+
+        with pytest.raises(ValueError, match="Unknown backend"):
+            create_backend("invalid")
+
+    def test_create_backend_with_port(self):
+        """create_backend('llama-cpp', port=9090) uses custom port."""
+        from llm_benchmark.backends import create_backend
+
+        backend = create_backend("llama-cpp", port=9090)
+        assert "9090" in backend._base_url
+
+    def test_create_backend_with_host_and_port(self):
+        """create_backend('lm-studio', host='0.0.0.0', port=5555) uses custom host and port."""
+        from llm_benchmark.backends import create_backend
+
+        backend = create_backend("lm-studio", host="0.0.0.0", port=5555)
+        assert "0.0.0.0" in backend._base_url
+        assert "5555" in backend._base_url
+
+    def test_create_backend_default_is_ollama(self):
+        """create_backend() with no args returns OllamaBackend."""
+        from llm_benchmark.backends import create_backend
+        from llm_benchmark.backends.ollama import OllamaBackend
+
+        backend = create_backend()
+        assert isinstance(backend, OllamaBackend)

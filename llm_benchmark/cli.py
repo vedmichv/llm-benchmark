@@ -22,7 +22,7 @@ def _build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser with subcommands."""
     parser = argparse.ArgumentParser(
         prog="llm_benchmark",
-        description="Benchmark your Ollama models",
+        description="Benchmark your local LLM models",
     )
     parser.add_argument(
         "--debug",
@@ -34,6 +34,24 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # run subcommand
     run_parser = subparsers.add_parser("run", help="Run benchmarks")
+    run_parser.add_argument(
+        "--backend",
+        choices=["ollama", "llama-cpp", "lm-studio"],
+        default="ollama",
+        help="Backend to use (default: ollama)",
+    )
+    run_parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="Custom port for backend server",
+    )
+    run_parser.add_argument(
+        "--model-path",
+        type=str,
+        default=None,
+        help="Path to GGUF model file (required for llama-cpp)",
+    )
     run_parser.add_argument(
         "--verbose", "-v",
         action="store_true",
@@ -127,7 +145,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     # info subcommand
-    subparsers.add_parser("info", help="Show system information")
+    info_parser = subparsers.add_parser("info", help="Show system information")
+    info_parser.add_argument(
+        "--backend",
+        choices=["ollama", "llama-cpp", "lm-studio"],
+        default="ollama",
+        help="Backend to use (default: ollama)",
+    )
 
     # analyze subcommand
     analyze_parser = subparsers.add_parser(
@@ -173,7 +197,11 @@ def _handle_run(args: argparse.Namespace) -> int:
     from llm_benchmark.system import format_system_summary, get_system_info
 
     console = get_console()
-    backend = create_backend()
+    backend = create_backend(args.backend, port=args.port)
+
+    # Store model_path on backend for llama-cpp preflight/auto-start
+    if hasattr(args, "model_path") and args.model_path is not None:
+        backend._model_path = args.model_path  # type: ignore[attr-defined]
 
     # Pre-flight checks
     models = run_preflight_checks(
@@ -417,13 +445,14 @@ def _handle_compare(args: argparse.Namespace) -> int:
     return 0
 
 
-def _handle_info(_args: argparse.Namespace) -> int:
+def _handle_info(args: argparse.Namespace) -> int:
     """Handle the 'info' subcommand."""
     from llm_benchmark.backends import create_backend
     from llm_benchmark.system import get_system_info
 
     console = get_console()
-    backend = create_backend()
+    backend_name = getattr(args, "backend", "ollama")
+    backend = create_backend(backend_name)
     info = get_system_info(backend=backend)
 
     console.rule("[bold]System Information[/bold]")
