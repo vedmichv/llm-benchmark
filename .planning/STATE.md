@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Multi-Backend Benchmark
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-03-14T11:59:28Z"
-last_activity: 2026-03-14 — 05-01 Backend Protocol and OllamaBackend complete
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-03-14T12:15:07.476Z"
+last_activity: 2026-03-14 — 05-02 Core pipeline Backend migration complete
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 1
-  completed_plans: 1
-  percent: 10
+  total_plans: 3
+  completed_plans: 2
+  percent: 93
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-14)
 ## Current Position
 
 Phase: 5 of 7 (Backend Abstraction)
-Plan: 1 of 1 complete
+Plan: 2 of 3 complete
 Status: Executing
-Last activity: 2026-03-14 — 05-01 Backend Protocol and OllamaBackend complete
+Last activity: 2026-03-14 — 05-02 Core pipeline Backend migration complete
 
-Progress: [█░░░░░░░░░] 10% (v2.0)
+Progress: [█████████░] 93% (v2.0)
 
 ## Performance Metrics
 
@@ -69,6 +69,9 @@ Recent decisions affecting current work:
 - [05-01]: Import ollama exceptions directly to avoid mock interference in tests
 - [05-01]: StreamResult uses finalize callable for deferred BackendResponse
 - [05-01]: All BackendResponse timing fields default to 0.0 for flexibility
+- [05-02]: Preflight returns list[dict] for backend-agnostic model lists
+- [05-02]: Optional backend param with create_backend() fallback for backward compat
+- [05-02]: concurrent.py/sweep.py retain raw ollama SDK until full Backend migration
 
 ### Pending Todos
 
@@ -82,6 +85,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T11:59:28Z
-Stopped at: Completed 05-01-PLAN.md
-Resume file: .planning/phases/05-backend-abstraction/05-01-SUMMARY.md
+Last session: 2026-03-14T12:15:07.473Z
+Stopped at: Completed 05-02-PLAN.md
+Resume file: None
