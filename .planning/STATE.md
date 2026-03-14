@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Multi-Backend Benchmark
-status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-03-14T12:15:07.476Z"
-last_activity: 2026-03-14 — 05-02 Core pipeline Backend migration complete
+status: phase-complete
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-03-14T12:22:41Z"
+last_activity: 2026-03-14 — 05-03 Final Backend migration complete (phase done)
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 93
+  completed_plans: 3
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-14)
 
 ## Current Position
 
-Phase: 5 of 7 (Backend Abstraction)
-Plan: 2 of 3 complete
-Status: Executing
-Last activity: 2026-03-14 — 05-02 Core pipeline Backend migration complete
+Phase: 5 of 7 (Backend Abstraction) -- COMPLETE
+Plan: 3 of 3 complete
+Status: Phase Complete
+Last activity: 2026-03-14 — 05-03 Final Backend migration complete
 
-Progress: [█████████░] 93% (v2.0)
+Progress: [██████████] 100% (v2.0 Phase 5)
 
 ## Performance Metrics
 
@@ -71,7 +71,9 @@ Recent decisions affecting current work:
 - [05-01]: All BackendResponse timing fields default to 0.0 for flexibility
 - [05-02]: Preflight returns list[dict] for backend-agnostic model lists
 - [05-02]: Optional backend param with create_backend() fallback for backward compat
-- [05-02]: concurrent.py/sweep.py retain raw ollama SDK until full Backend migration
+- [05-03]: ThreadPoolExecutor replaces asyncio for concurrent requests (Backend.chat is sync)
+- [05-03]: get_model_layers uses duck-typing -- not in Protocol, backend-specific
+- [05-03]: All isinstance backward-compat checks removed -- models always dicts
 
 ### Pending Todos
 
@@ -85,6 +87,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T12:15:07.473Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-03-14T12:22:41Z
+Stopped at: Completed 05-03-PLAN.md (Phase 5 complete)
 Resume file: None

@@ -19,7 +19,7 @@
 
 ### v2.0 Multi-Backend Benchmark
 
-- [ ] **Phase 5: Backend Abstraction** - Extract Backend Protocol and OllamaBackend adapter with zero user-visible change
+- [x] **Phase 5: Backend Abstraction** - Extract Backend Protocol and OllamaBackend adapter with zero user-visible change (completed 2026-03-14)
 - [ ] **Phase 6: New Backends** - Add llama.cpp and LM Studio backends with CLI integration and cross-platform support
 - [ ] **Phase 7: Cross-Backend Comparison** - Full comparison mode with matrix benchmarking, reports, and documentation
 
@@ -34,7 +34,7 @@
   2. All 152+ existing tests pass without modification to test assertions (only import paths may change)
   3. `runner.py` contains zero direct `ollama.chat()` calls -- all inference goes through a Backend instance
   4. A `BackendResponse` model exists that normalizes all timing data to seconds, and OllamaBackend converts nanoseconds internally
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 05-01-PLAN.md -- Create backends/ subpackage with Protocol, BackendResponse, OllamaBackend, and tests
@@ -75,6 +75,6 @@ Phases execute in numeric order: 5 -> 6 -> 7
 | 2. Measurement Reliability | v1.0 | 2/2 | Complete | 2026-03-12 |
 | 3. Advanced Benchmarking | v1.0 | 4/4 | Complete | 2026-03-13 |
 | 4. Student Experience | v1.0 | 3/3 | Complete | 2026-03-13 |
-| 5. Backend Abstraction | 2/3 | In Progress|  | - |
+| 5. Backend Abstraction | 3/3 | Complete   | 2026-03-14 | - |
 | 6. New Backends | v2.0 | 0/? | Not started | - |
 | 7. Cross-Backend Comparison | v2.0 | 0/? | Not started | - |

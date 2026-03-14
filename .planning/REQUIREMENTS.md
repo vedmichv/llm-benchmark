@@ -55,7 +55,7 @@
 - [x] **BACK-02**: BackendResponse normalizes all timing data to seconds regardless of backend (Ollama ns, llama.cpp ms, LM Studio pre-computed)
 - [x] **BACK-03**: OllamaBackend wraps existing ollama.chat() code with zero behavior change for users
 - [x] **BACK-04**: Runner accepts Backend instance instead of calling ollama directly
-- [ ] **BACK-05**: All existing tests pass after refactor with no Ollama-specific type leaks
+- [x] **BACK-05**: All existing tests pass after refactor with no Ollama-specific type leaks
 
 ### New Backends (BEND)
 
@@ -155,7 +155,7 @@
 | BACK-02 | Phase 5 | Complete |
 | BACK-03 | Phase 5 | Complete |
 | BACK-04 | Phase 5 | Complete |
-| BACK-05 | Phase 5 | Pending |
+| BACK-05 | Phase 5 | Complete |
 | BEND-01 | Phase 6 | Pending |
 | BEND-02 | Phase 6 | Pending |
 | BEND-03 | Phase 6 | Pending |
