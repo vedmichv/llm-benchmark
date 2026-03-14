@@ -1,7 +1,8 @@
 """Tests for concurrent benchmarking module."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
+from llm_benchmark.backends import BackendResponse
 from llm_benchmark.concurrent import (
     auto_detect_concurrency,
     run_concurrent_batch,
@@ -153,23 +154,13 @@ class TestAutoDetectConcurrency:
 
 
 class TestRunConcurrentBatch:
-    """Test run_concurrent_batch fires N parallel requests."""
+    """Test run_concurrent_batch fires N parallel requests via ThreadPoolExecutor."""
 
-    @patch("llm_benchmark.concurrent.ollama.AsyncClient")
     def test_run_concurrent_batch_returns_n_results(
-        self, mock_client_cls, sample_ollama_response_dict
+        self, mock_backend, sample_backend_response
     ):
         """N workers produce N results with correct wall time."""
-        mock_response = MagicMock()
-        mock_response.model_dump.return_value = sample_ollama_response_dict
-
-        mock_client = AsyncMock()
-        mock_client.chat = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client_cls.return_value = mock_client
-
-        batch = run_concurrent_batch("llama3.2:1b", "Hello", n=3, timeout=30)
+        batch = run_concurrent_batch(mock_backend, "llama3.2:1b", "Hello", n=3, timeout=30)
 
         assert isinstance(batch, ConcurrentBatchResult)
         assert len(batch.results) == 3
@@ -177,30 +168,27 @@ class TestRunConcurrentBatch:
         assert batch.wall_time_s > 0
         assert batch.num_workers == 3
 
-    @patch("llm_benchmark.concurrent.ollama.AsyncClient")
-    def test_failed_request_continues(
-        self, mock_client_cls, sample_ollama_response_dict
-    ):
+    def test_failed_request_continues(self, mock_backend):
         """One failing request does not stop others."""
-        mock_response = MagicMock()
-        mock_response.model_dump.return_value = sample_ollama_response_dict
-
         call_count = 0
 
-        async def side_effect(**kwargs):
+        def chat_side_effect(model, messages, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 raise ConnectionError("Connection refused")
-            return mock_response
+            return BackendResponse(
+                model=model,
+                content="test",
+                done=True,
+                eval_count=120,
+                eval_duration=4.0,
+                total_duration=5.0,
+            )
 
-        mock_client = AsyncMock()
-        mock_client.chat = AsyncMock(side_effect=side_effect)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client_cls.return_value = mock_client
+        mock_backend.chat.side_effect = chat_side_effect
 
-        batch = run_concurrent_batch("llama3.2:1b", "Hello", n=3, timeout=30)
+        batch = run_concurrent_batch(mock_backend, "llama3.2:1b", "Hello", n=3, timeout=30)
 
         assert len(batch.results) == 3
         failed = [r for r in batch.results if not r.success]
@@ -209,21 +197,11 @@ class TestRunConcurrentBatch:
         assert len(succeeded) == 2
         assert "Connection refused" in failed[0].error
 
-    @patch("llm_benchmark.concurrent.ollama.AsyncClient")
     def test_aggregate_throughput_calculation(
-        self, mock_client_cls, sample_ollama_response_dict
+        self, mock_backend, sample_backend_response
     ):
         """aggregate_throughput_ts = sum(eval_count) / wall_time_s."""
-        mock_response = MagicMock()
-        mock_response.model_dump.return_value = sample_ollama_response_dict
-
-        mock_client = AsyncMock()
-        mock_client.chat = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client_cls.return_value = mock_client
-
-        batch = run_concurrent_batch("llama3.2:1b", "Hello", n=2, timeout=30)
+        batch = run_concurrent_batch(mock_backend, "llama3.2:1b", "Hello", n=2, timeout=30)
 
         # Each response has eval_count=120, so total=240
         # aggregate_throughput_ts = 240 / wall_time_s

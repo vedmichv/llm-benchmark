@@ -138,7 +138,7 @@ def offer_model_downloads(backend, installed_models: list, *, force: bool = Fals
         return installed_models
 
     recommended = get_recommended_models(total_memory_gb)
-    installed_names = [m['model'] if isinstance(m, dict) else m.model for m in installed_models]
+    installed_names = [m['model'] for m in installed_models]
 
     if force:
         # Show all recommended models, mark installed ones

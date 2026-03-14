@@ -1,7 +1,7 @@
 """Shared test fixtures."""
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -57,6 +57,23 @@ def sample_backend_response():
 
 
 @pytest.fixture
+def cached_backend_response():
+    """Return a BackendResponse simulating prompt caching."""
+    return BackendResponse(
+        model="llama3.2:1b",
+        content="The sky is blue because...",
+        done=True,
+        total_duration=5.0,
+        load_duration=0.5,
+        prompt_eval_count=0,
+        prompt_eval_duration=0.0,
+        eval_count=120,
+        eval_duration=4.0,
+        prompt_cached=True,
+    )
+
+
+@pytest.fixture
 def sample_benchmark_result(sample_backend_response):
     """Return a successful BenchmarkResult with a valid BackendResponse."""
     return BenchmarkResult(
@@ -68,14 +85,16 @@ def sample_benchmark_result(sample_backend_response):
 
 
 @pytest.fixture
-def mock_async_client(sample_ollama_response_dict):
-    """Provide a mock ollama.AsyncClient with configurable chat() return value.
-
-    The mock's chat() returns a MagicMock with model_dump() returning the
-    sample response dict, matching ollama SDK ChatResponse behavior.
-    """
-    client = AsyncMock()
-    mock_response = MagicMock()
-    mock_response.model_dump.return_value = sample_ollama_response_dict
-    client.chat = AsyncMock(return_value=mock_response)
-    return client
+def mock_backend(sample_backend_response):
+    """Provide a mock Backend with default behavior for all protocol methods."""
+    backend = MagicMock()
+    backend.name = "ollama"
+    backend.version = "0.6.1"
+    backend.chat.return_value = sample_backend_response
+    backend.list_models.return_value = [{"model": "llama3.2:1b", "size": 1_073_741_824}]
+    backend.check_connectivity.return_value = True
+    backend.warmup.return_value = True
+    backend.unload_model.return_value = True
+    backend.detect_context_window.return_value = 4096
+    backend.get_model_size.return_value = 1.0
+    return backend
