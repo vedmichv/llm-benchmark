@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 
 from llm_benchmark.backends import BackendResponse
@@ -98,3 +99,87 @@ def mock_backend(sample_backend_response):
     backend.detect_context_window.return_value = 4096
     backend.get_model_size.return_value = 1.0
     return backend
+
+
+# ---------------------------------------------------------------------------
+# httpx mock response factory
+# ---------------------------------------------------------------------------
+
+
+def make_httpx_response(
+    status_code: int = 200,
+    json_data: dict | None = None,
+    text: str = "",
+    headers: dict | None = None,
+) -> httpx.Response:
+    """Create a mock httpx.Response with the given data."""
+    resp = httpx.Response(
+        status_code=status_code,
+        headers=headers or {},
+        json=json_data,
+        text=text if json_data is None else "",
+    )
+    return resp
+
+
+@pytest.fixture
+def mock_httpx_response():
+    """Factory fixture that creates mock httpx.Response objects."""
+    return make_httpx_response
+
+
+@pytest.fixture
+def llamacpp_chat_response():
+    """Sample llama.cpp /v1/chat/completions JSON with timings object."""
+    return {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "The sky is blue because of Rayleigh scattering.",
+                },
+                "finish_reason": "stop",
+            }
+        ],
+        "model": "my-model",
+        "timings": {
+            "prompt_n": 10,
+            "prompt_ms": 30.0,
+            "prompt_per_token_ms": 3.0,
+            "prompt_per_second": 333.33,
+            "predicted_n": 35,
+            "predicted_ms": 660.0,
+            "predicted_per_token_ms": 18.857,
+            "predicted_per_second": 53.03,
+        },
+        "usage": {
+            "prompt_tokens": 10,
+            "completion_tokens": 35,
+            "total_tokens": 45,
+        },
+    }
+
+
+@pytest.fixture
+def lmstudio_chat_response():
+    """Sample LM Studio /v1/chat/completions JSON with usage + stats."""
+    return {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "The sky appears blue due to scattering.",
+                },
+                "finish_reason": "stop",
+            }
+        ],
+        "model": "my-lmstudio-model",
+        "usage": {
+            "prompt_tokens": 10,
+            "completion_tokens": 35,
+            "total_tokens": 45,
+        },
+        "stats": {
+            "tokens_per_second": 45.2,
+        },
+    }
