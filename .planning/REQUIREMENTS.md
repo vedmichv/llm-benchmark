@@ -51,9 +51,9 @@
 
 ### Backend Abstraction (BACK)
 
-- [ ] **BACK-01**: Backend Protocol defines chat(), list_models(), unload_model() with normalized BackendResponse
-- [ ] **BACK-02**: BackendResponse normalizes all timing data to seconds regardless of backend (Ollama ns, llama.cpp ms, LM Studio pre-computed)
-- [ ] **BACK-03**: OllamaBackend wraps existing ollama.chat() code with zero behavior change for users
+- [x] **BACK-01**: Backend Protocol defines chat(), list_models(), unload_model() with normalized BackendResponse
+- [x] **BACK-02**: BackendResponse normalizes all timing data to seconds regardless of backend (Ollama ns, llama.cpp ms, LM Studio pre-computed)
+- [x] **BACK-03**: OllamaBackend wraps existing ollama.chat() code with zero behavior change for users
 - [ ] **BACK-04**: Runner accepts Backend instance instead of calling ollama directly
 - [ ] **BACK-05**: All existing tests pass after refactor with no Ollama-specific type leaks
 
@@ -151,9 +151,9 @@
 | UX-06 | Phase 4 | Complete |
 | QUAL-03 | Phase 4 | Complete |
 | QUAL-04 | Phase 4 | Complete |
-| BACK-01 | Phase 5 | Pending |
-| BACK-02 | Phase 5 | Pending |
-| BACK-03 | Phase 5 | Pending |
+| BACK-01 | Phase 5 | Complete |
+| BACK-02 | Phase 5 | Complete |
+| BACK-03 | Phase 5 | Complete |
 | BACK-04 | Phase 5 | Pending |
 | BACK-05 | Phase 5 | Pending |
 | BEND-01 | Phase 6 | Pending |
