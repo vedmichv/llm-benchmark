@@ -47,7 +47,52 @@
 - [x] **QUAL-04**: GitHub Actions CI running lint (ruff) + compile check + unit tests
 - [x] **QUAL-05**: Python >=3.10 requirement (Pydantic 2.x + tenacity compatibility)
 
-## v2 Requirements
+## v2.0 Requirements (Multi-Backend Benchmark)
+
+### Backend Abstraction (BACK)
+
+- [ ] **BACK-01**: Backend Protocol defines chat(), list_models(), unload_model() with normalized BackendResponse
+- [ ] **BACK-02**: BackendResponse normalizes all timing data to seconds regardless of backend (Ollama ns, llama.cpp ms, LM Studio pre-computed)
+- [ ] **BACK-03**: OllamaBackend wraps existing ollama.chat() code with zero behavior change for users
+- [ ] **BACK-04**: Runner accepts Backend instance instead of calling ollama directly
+- [ ] **BACK-05**: All existing tests pass after refactor with no Ollama-specific type leaks
+
+### New Backends (BEND)
+
+- [ ] **BEND-01**: LlamaCppBackend connects to llama-server via httpx, reads native /completion timings
+- [ ] **BEND-02**: LMStudioBackend connects to LM Studio via httpx, reads native /api/v1/ stats
+- [ ] **BEND-03**: Auto-detect installed backends by checking binary presence (shutil.which)
+- [ ] **BEND-04**: Auto-start backends if installed but not running (ollama serve, llama-server, lms server start)
+- [ ] **BEND-05**: Backend-specific preflight checks (non-fatal: skip unavailable backends gracefully)
+
+### CLI Integration (CLI)
+
+- [ ] **CLI-01**: `--backend` flag accepts ollama, llama-cpp, lm-studio, all (default: ollama)
+- [ ] **CLI-02**: Interactive menu shows detected backends and lets user choose after mode selection
+- [ ] **CLI-03**: Backend name included in export filenames, JSON metadata, and Markdown reports
+- [ ] **CLI-04**: System summary shows backend name and version
+- [ ] **CLI-05**: Backend choice only prompted when >1 backend detected (no noise for Ollama-only users)
+
+### Cross-Backend Comparison (COMP)
+
+- [ ] **COMP-01**: `--backend all` runs same prompts on all detected backends sequentially
+- [ ] **COMP-02**: Single-model comparison: one model tested on all backends, side-by-side bar chart
+- [ ] **COMP-03**: Full matrix mode: N models × M backends, comparison table with winner per model
+- [ ] **COMP-04**: "Fastest backend" recommendation per model and overall in comparison report
+- [ ] **COMP-05**: Comparison mode as menu option 5 ("Compare backends")
+
+### Cross-Platform (PLAT)
+
+- [ ] **PLAT-01**: All backends work on macOS (Apple Silicon Metal), Windows (CUDA/CPU), Linux (CUDA/CPU)
+- [ ] **PLAT-02**: llama.cpp install detection and auto-start per OS (Homebrew/winget/apt)
+- [ ] **PLAT-03**: LM Studio install detection and auto-start per OS (no MLX on Linux noted)
+
+### Documentation (DOC)
+
+- [ ] **DOC-01**: README updated with multi-backend quick start and per-OS setup guides for all 3 backends
+- [ ] **DOC-02**: Backend comparison example in README showing real cross-backend output
+
+## v3 Requirements (Future)
 
 ### Advanced Benchmarking
 
@@ -60,19 +105,20 @@
 
 - **ADVX-01**: HTML report with interactive charts
 - **ADVX-02**: Web UI dashboard for results
-- **ADVX-03**: Automated model recommendations based on hardware profile
-- **ADVX-04**: Student results comparison/leaderboard
+- **ADVX-03**: Student results comparison/leaderboard
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| llama.cpp server direct support | Ollama abstracts this; students shouldn't need to build from source |
 | nginx round-robin load balancing | Enterprise feature, too complex for course |
 | dialog TUI dependency | Extra dependency; simple CLI menu is sufficient |
 | 30+ environment variables | Too confusing; CLI flags + sensible defaults |
-| Real-time streaming dashboard | Web UI is v2; terminal output is sufficient for v1 |
+| Real-time streaming dashboard | Web UI is v3; terminal output sufficient |
 | Docker packaging | Students need to understand local setup, not hide it |
+| Cloud API backends (OpenAI, Anthropic) | Focus on local inference only |
+| Custom llama.cpp compilation | Students use Homebrew/winget/apt prebuilt |
+| llama-cpp-python binding | Tool talks to llama-server via HTTP, not C++ bindings |
 
 ## Traceability
 
