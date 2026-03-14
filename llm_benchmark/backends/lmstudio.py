@@ -195,9 +195,14 @@ class LMStudioBackend:
             resp = self._client.get("/api/v1/models")
             resp.raise_for_status()
             data = resp.json()
+            models_list = data.get("models", data.get("data", []))
             return [
-                {"model": m.get("id", ""), "size": 0}
-                for m in data.get("data", [])
+                {
+                    "model": m.get("key", m.get("id", "")),
+                    "size": m.get("size_bytes", 0),
+                }
+                for m in models_list
+                if m.get("type", "llm") != "embedding"
             ]
         except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
             raise BackendError(str(e), retryable=True, original=e) from e
