@@ -349,6 +349,94 @@ class TestGGUFScanning:
         assert _clean_gguf_filename(Path("my-model-Q4_K_M.gguf")) == "my model Q4 K M"
 
 
+class TestCompareBackendsMode:
+    """Tests for menu option 5 (Compare backends)."""
+
+    @patch("llm_benchmark.recommend.offer_model_downloads", side_effect=lambda backend, m: m)
+    @patch("llm_benchmark.menu.get_console")
+    @patch("llm_benchmark.system.format_system_summary", return_value="sys info")
+    def test_option_5_returns_backend_all(self, _mock_summary, _mock_console, _mock_rec, models, mock_menu_backend):
+        """Mode '5' returns Namespace with backend='all'."""
+        from llm_benchmark.menu import run_interactive_menu
+
+        mock_status = MagicMock()
+        mock_status.running = True
+        mock_status.name = "ollama"
+
+        with (
+            patch("builtins.input", return_value="5"),
+            patch("llm_benchmark.backends.detection.detect_backends", return_value=[mock_status, mock_status]),
+        ):
+            ns = run_interactive_menu(mock_menu_backend, models)
+
+        assert ns.backend == "all"
+        assert ns.prompt_set == "medium"
+        assert ns.runs_per_prompt == 2
+
+    @patch("llm_benchmark.recommend.offer_model_downloads", side_effect=lambda backend, m: m)
+    @patch("llm_benchmark.menu.get_console")
+    @patch("llm_benchmark.system.format_system_summary", return_value="sys info")
+    def test_option_5_single_backend_shows_hint(self, _mock_summary, mock_console_fn, _mock_rec, models, mock_menu_backend):
+        """Mode '5' with 1 running backend shows install hint."""
+        from llm_benchmark.menu import run_interactive_menu
+
+        mock_status_running = MagicMock()
+        mock_status_running.running = True
+        mock_status_running.installed = True
+        mock_status_running.name = "ollama"
+
+        mock_status_not = MagicMock()
+        mock_status_not.running = False
+        mock_status_not.installed = False
+        mock_status_not.name = "llama-cpp"
+
+        mock_status_not2 = MagicMock()
+        mock_status_not2.running = False
+        mock_status_not2.installed = False
+        mock_status_not2.name = "lm-studio"
+
+        with (
+            patch("builtins.input", return_value="5"),
+            patch(
+                "llm_benchmark.backends.detection.detect_backends",
+                return_value=[mock_status_running, mock_status_not, mock_status_not2],
+            ),
+            patch(
+                "llm_benchmark.backends.detection.get_install_instructions",
+                return_value="brew install llama.cpp",
+            ),
+        ):
+            ns = run_interactive_menu(mock_menu_backend, models)
+
+        # Should still return backend='all'
+        assert ns.backend == "all"
+
+        # Verify hint was printed (check console.print calls)
+        console = mock_console_fn.return_value
+        print_calls = [str(c) for c in console.print.call_args_list]
+        hint_printed = any("Only 1 backend" in s for s in print_calls)
+        assert hint_printed, f"Expected install hint in console output, got: {print_calls}"
+
+    @patch("llm_benchmark.recommend.offer_model_downloads", side_effect=lambda backend, m: m)
+    @patch("llm_benchmark.menu.get_console")
+    @patch("llm_benchmark.system.format_system_summary", return_value="sys info")
+    def test_modes_1_through_4_unchanged(self, _mock_summary, _mock_console, _mock_rec, models, mock_menu_backend):
+        """Modes 1-4 still work identically (regression test)."""
+        from llm_benchmark.menu import run_interactive_menu
+
+        # Mode 1 still works
+        with patch("builtins.input", return_value="1"):
+            ns = run_interactive_menu(mock_menu_backend, models)
+        assert ns.runs_per_prompt == 1
+        assert ns.backend == "ollama"
+
+        # Mode 2 still works
+        with patch("builtins.input", return_value="2"):
+            ns = run_interactive_menu(mock_menu_backend, models)
+        assert ns.prompt_set == "medium"
+        assert ns.runs_per_prompt == 2
+
+
 class TestFailureSummary:
     """Tests for the failure summary display in cli._print_failure_summary."""
 
