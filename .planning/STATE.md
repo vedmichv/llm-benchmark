@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Multi-Backend Benchmark
 status: executing
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-03-14T17:01:27.000Z"
-last_activity: 2026-03-14 — 06-03 CLI and preflight integration for multi-backend
+stopped_at: Completed 06-04-PLAN.md
+last_updated: "2026-03-14T17:02:42.000Z"
+last_activity: 2026-03-14 — 06-04 Backend-aware exports and system inventory
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
-  percent: 75
+  completed_plans: 7
+  percent: 80
 ---
 
 # Project State
@@ -51,6 +51,7 @@ Progress: [████████░░] 80% (v2.0 Phase 6)
 **Recent Trend:**
 - v1.0 plans averaged 6min each
 - Trend: Stable
+| Phase 06 P04 | 5min | 2 tasks | 6 files |
 | Phase 06 P03 | 3min | 2 tasks | 5 files |
 | Phase 06 P02 | 2min | 1 tasks | 2 files |
 | Phase 06 P01 | 5min | 1 tasks | 6 files |
@@ -87,6 +88,9 @@ Recent decisions affecting current work:
 - [06-01]: SSE streaming parsed via iter_lines with data: prefix stripping
 - [06-01]: LM Studio eval_duration derived from eval_count / tokens_per_second
 - [06-01]: llama.cpp total_duration = prompt_ms + predicted_ms (no separate field)
+- [06-04]: _filename() helper centralizes backend-aware filename generation for all export functions
+- [06-04]: detect_backends() lazy-imported in format_system_summary to avoid circular deps
+- [06-04]: KNOWN_ISSUES dict maps (backend_name, error_substring) to hints
 
 ### Pending Todos
 
@@ -100,6 +104,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T17:01:27.000Z
-Stopped at: Completed 06-03-PLAN.md
+Last session: 2026-03-14T17:02:42.000Z
+Stopped at: Completed 06-04-PLAN.md
 Resume file: None

@@ -69,8 +69,8 @@
 
 - [x] **CLI-01**: `--backend` flag accepts ollama, llama-cpp, lm-studio, all (default: ollama)
 - [ ] **CLI-02**: Interactive menu shows detected backends and lets user choose after mode selection
-- [ ] **CLI-03**: Backend name included in export filenames, JSON metadata, and Markdown reports
-- [ ] **CLI-04**: System summary shows backend name and version
+- [x] **CLI-03**: Backend name included in export filenames, JSON metadata, and Markdown reports
+- [x] **CLI-04**: System summary shows backend name and version
 - [ ] **CLI-05**: Backend choice only prompted when >1 backend detected (no noise for Ollama-only users)
 
 ### Cross-Backend Comparison (COMP)
@@ -163,8 +163,8 @@
 | BEND-05 | Phase 6 | Complete |
 | CLI-01 | Phase 6 | Complete |
 | CLI-02 | Phase 6 | Pending |
-| CLI-03 | Phase 6 | Pending |
-| CLI-04 | Phase 6 | Pending |
+| CLI-03 | Phase 6 | Complete |
+| CLI-04 | Phase 6 | Complete |
 | CLI-05 | Phase 6 | Pending |
 | PLAT-01 | Phase 6 | Complete |
 | PLAT-02 | Phase 6 | Complete |
