@@ -79,7 +79,7 @@
 - [x] **COMP-02**: Single-model comparison: one model tested on all backends, side-by-side bar chart
 - [x] **COMP-03**: Full matrix mode: N models × M backends, comparison table with winner per model
 - [x] **COMP-04**: "Fastest backend" recommendation per model and overall in comparison report
-- [ ] **COMP-05**: Comparison mode as menu option 5 ("Compare backends")
+- [x] **COMP-05**: Comparison mode as menu option 5 ("Compare backends")
 
 ### Cross-Platform (PLAT)
 
@@ -173,7 +173,7 @@
 | COMP-02 | Phase 7 | Complete |
 | COMP-03 | Phase 7 | Complete |
 | COMP-04 | Phase 7 | Complete |
-| COMP-05 | Phase 7 | Pending |
+| COMP-05 | Phase 7 | Complete |
 | DOC-01 | Phase 7 | Complete |
 | DOC-02 | Phase 7 | Complete |
 
