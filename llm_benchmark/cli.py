@@ -235,6 +235,8 @@ def _handle_run(args: argparse.Namespace) -> int:
         from llm_benchmark.comparison import (
             export_comparison_json,
             export_comparison_markdown,
+            render_comparison_bar_chart,
+            render_comparison_matrix,
             run_comparison,
         )
 
@@ -259,6 +261,18 @@ def _handle_run(args: argparse.Namespace) -> int:
             skip_models=args.skip_models,
             skip_checks=args.skip_checks,
         )
+
+        # Display comparison results in terminal
+        if len(comparison.models) == 1:
+            backend_rates = [
+                (r.backend, r.avg_response_ts) for r in comparison.results
+            ]
+            render_comparison_bar_chart(backend_rates, comparison.models[0])
+        else:
+            results_by_backend: dict[str, list] = {}
+            for r in comparison.results:
+                results_by_backend.setdefault(r.backend, []).append(r)
+            render_comparison_matrix(results_by_backend)
 
         # Export results
         first_backend = create_backend(running[0].name)
