@@ -26,31 +26,30 @@ RAM_TIER_THRESHOLDS: dict[str, int] = {
 }
 
 # Curated model list ordered by tier, then roughly by size.
-# Updated 2026-03 with latest leaderboard models (lmarena).
+# Updated 2026-03-14: replaced unstable qwen3.5 small/medium with stable alternatives.
+# qwen3.5 has known Ollama bugs (#14579, #14662) — only 35b kept (works on 64GB+).
 TIERED_MODELS: list[dict[str, str]] = [
     # --- small (any RAM) ---
-    {"name": "qwen3.5:0.8b", "size_label": "0.8B", "tier": "small", "description": "Smallest Qwen 3.5 (vision+text)"},
     {"name": "llama3.2:1b", "size_label": "1B", "tier": "small", "description": "Fast general-purpose chat"},
-    {"name": "qwen3.5:2b", "size_label": "2B", "tier": "small", "description": "Compact multimodal model"},
+    {"name": "qwen3:1.7b", "size_label": "1.7B", "tier": "small", "description": "Compact thinking model"},
     {"name": "phi4-mini", "size_label": "3.8B", "tier": "small", "description": "Compact reasoning model"},
     # --- medium (16 GB+) ---
-    {"name": "qwen3.5:4b", "size_label": "4B", "tier": "medium", "description": "Efficient multimodal (256K ctx)"},
     {"name": "gemma3:4b", "size_label": "4B", "tier": "medium", "description": "Google's efficient model"},
     {"name": "llama3.2:3b", "size_label": "3B", "tier": "medium", "description": "Balanced speed and quality"},
-    {"name": "qwen3.5:9b", "size_label": "9B", "tier": "medium", "description": "Strong all-rounder (default)"},
+    {"name": "qwen3:8b", "size_label": "8B", "tier": "medium", "description": "Strong all-rounder (stable)"},
     {"name": "mistral:7b", "size_label": "7B", "tier": "medium", "description": "Classic 7B from Mistral AI"},
     # --- large (36 GB+) ---
-    {"name": "qwen3.5:27b", "size_label": "27B", "tier": "large", "description": "Top-tier open model (arena #10)"},
-    {"name": "gemma3:12b", "size_label": "12B", "tier": "large", "description": "Google's larger model"},
+    {"name": "gemma3:27b", "size_label": "27B", "tier": "large", "description": "Google's flagship (stable, fast)"},
+    {"name": "gemma3:12b", "size_label": "12B", "tier": "large", "description": "Google's mid-size model"},
     {"name": "deepseek-r1:14b", "size_label": "14B", "tier": "large", "description": "Reasoning-focused model"},
+    {"name": "qwen3:14b", "size_label": "14B", "tier": "large", "description": "Qwen 3 thinking (stable)"},
     # --- xl (64 GB+) ---
     {"name": "nemotron-3-super", "size_label": "120B MoE/12B active", "tier": "xl", "description": "NVIDIA hybrid Mamba-Transformer (new!)"},
-    {"name": "qwen3.5:35b", "size_label": "35B", "tier": "xl", "description": "Qwen 3.5 large (arena top-20)"},
+    {"name": "qwen3.5:35b", "size_label": "35B MoE", "tier": "xl", "description": "Qwen 3.5 MoE (arena top-20, may timeout)"},
+    {"name": "qwen3:32b", "size_label": "32B", "tier": "xl", "description": "Qwen 3 thinking (stable)"},
     {"name": "llama3.3:70b", "size_label": "70B", "tier": "xl", "description": "Meta flagship 70B model"},
-    {"name": "qwen3:32b", "size_label": "32B", "tier": "xl", "description": "Qwen 3 thinking model"},
     # --- xxl (100 GB+) ---
-    {"name": "qwen3.5:122b", "size_label": "122B", "tier": "xxl", "description": "Qwen 3.5 MoE (arena #8, 81 GB)"},
-    {"name": "llama3.1:70b", "size_label": "70B", "tier": "xxl", "description": "Llama 3.1 full-precision 70B"},
+    {"name": "qwen3.5:122b", "size_label": "122B MoE", "tier": "xxl", "description": "Qwen 3.5 MoE (arena #8, 81 GB)"},
     {"name": "deepseek-r1:70b", "size_label": "70B", "tier": "xxl", "description": "DeepSeek reasoning 70B"},
 ]
 
