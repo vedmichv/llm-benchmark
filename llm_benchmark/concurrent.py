@@ -1,6 +1,6 @@
-"""Async concurrent benchmarking orchestration.
+"""Concurrent benchmarking orchestration using ThreadPoolExecutor.
 
-Fires N parallel requests to the same Ollama model using asyncio.gather
+Fires N parallel requests to the same model using a Backend instance
 and measures wall-time aggregate throughput. Each request has its own
 try/except so failures are isolated.
 
@@ -12,13 +12,11 @@ Exports:
 
 from __future__ import annotations
 
-import asyncio
+import concurrent.futures
 import statistics
 import time
 
-import ollama
-
-from llm_benchmark.backends import BackendResponse
+from llm_benchmark.backends import Backend, BackendResponse
 from llm_benchmark.config import (
     DEFAULT_CONCURRENT,
     DEFAULT_TIMEOUT,
@@ -29,11 +27,6 @@ from llm_benchmark.models import (
     ConcurrentBatchResult,
 )
 from llm_benchmark.runner import warmup_model
-
-
-def _ns_to_sec(ns: int) -> float:
-    """Convert nanoseconds to seconds (for raw ollama async responses)."""
-    return ns / 1_000_000_000
 
 
 def auto_detect_concurrency(
@@ -55,51 +48,23 @@ def auto_detect_concurrency(
     return 2
 
 
-async def _single_request(
-    client: ollama.AsyncClient,
+def _single_request(
+    backend: Backend,
     model: str,
     prompt: str,
     request_id: int,
     num_workers: int,
     console,
 ) -> BenchmarkResult:
-    """Execute a single async chat request and return a BenchmarkResult.
+    """Execute a single chat request via Backend and return a BenchmarkResult.
 
     On success, prints a live per-request summary line.
     On failure, returns BenchmarkResult(success=False) without stopping others.
     """
     try:
-        raw_response = await client.chat(
+        response = backend.chat(
             model=model,
             messages=[{"role": "user", "content": prompt}],
-        )
-
-        # Convert SDK response to dict
-        if hasattr(raw_response, "model_dump"):
-            raw_response = raw_response.model_dump()
-        elif hasattr(raw_response, "dict"):
-            raw_response = raw_response.dict()
-
-        # Build BackendResponse from raw Ollama data (nanoseconds -> seconds)
-        msg = raw_response.get("message", {})
-        content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
-
-        prompt_eval_count = raw_response.get("prompt_eval_count", 0)
-        prompt_cached = prompt_eval_count == -1
-        if prompt_cached:
-            prompt_eval_count = 0
-
-        response = BackendResponse(
-            model=raw_response.get("model", model),
-            content=content,
-            done=raw_response.get("done", True),
-            prompt_eval_count=prompt_eval_count,
-            eval_count=raw_response.get("eval_count", 0),
-            total_duration=_ns_to_sec(raw_response.get("total_duration", 0)),
-            load_duration=_ns_to_sec(raw_response.get("load_duration", 0)),
-            prompt_eval_duration=_ns_to_sec(raw_response.get("prompt_eval_duration", 0)),
-            eval_duration=_ns_to_sec(raw_response.get("eval_duration", 0)),
-            prompt_cached=prompt_cached,
         )
 
         # Compute per-request throughput
@@ -131,27 +96,27 @@ async def _single_request(
         )
 
 
-async def _run_batch(
+def _run_batch(
+    backend: Backend,
     model: str,
     prompt: str,
     n: int,
     timeout: int,
 ) -> ConcurrentBatchResult:
-    """Fire N parallel requests via asyncio.gather, measure wall time.
+    """Fire N parallel requests via ThreadPoolExecutor, measure wall time.
 
     Each request runs in its own try/except via _single_request, so
-    gather does NOT need return_exceptions.
+    failures are isolated.
     """
     console = get_console()
 
-    async with ollama.AsyncClient() as client:
-        tasks = [
-            _single_request(client, model, prompt, i, n, console)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=n) as pool:
+        wall_start = time.perf_counter()
+        futures = [
+            pool.submit(_single_request, backend, model, prompt, i, n, console)
             for i in range(n)
         ]
-
-        wall_start = time.perf_counter()
-        results = await asyncio.gather(*tasks)
+        results = [f.result(timeout=timeout) for f in concurrent.futures.as_completed(futures)]
         wall_time_s = time.perf_counter() - wall_start
 
     successful = [r for r in results if r.success and r.response is not None]
@@ -184,15 +149,17 @@ async def _run_batch(
 
 
 def run_concurrent_batch(
+    backend: Backend,
     model: str,
     prompt: str,
     n: int = DEFAULT_CONCURRENT,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> ConcurrentBatchResult:
-    """Sync wrapper: fire N concurrent async requests to Ollama.
+    """Fire N concurrent requests to the backend via ThreadPoolExecutor.
 
     Args:
-        model: Ollama model name.
+        backend: Backend instance.
+        model: Model name.
         prompt: Prompt text.
         n: Number of concurrent requests.
         timeout: Per-request timeout in seconds.
@@ -200,10 +167,11 @@ def run_concurrent_batch(
     Returns:
         ConcurrentBatchResult with wall-time and per-request metrics.
     """
-    return asyncio.run(_run_batch(model, prompt, n, timeout))
+    return _run_batch(backend, model, prompt, n, timeout)
 
 
 def benchmark_model_concurrent(
+    backend: Backend,
     model_name: str,
     prompts: list[str],
     num_workers: int = DEFAULT_CONCURRENT,
@@ -217,11 +185,9 @@ def benchmark_model_concurrent(
     Warms up the model once, then for each prompt (x runs_per_prompt),
     fires a concurrent batch of num_workers parallel requests.
 
-    Note: warmup_model now requires a backend parameter. For concurrent mode,
-    we create a temporary backend for warmup only.
-
     Args:
-        model_name: Ollama model name.
+        backend: Backend instance.
+        model_name: Model name.
         prompts: List of prompt strings.
         num_workers: Number of concurrent requests per batch.
         runs_per_prompt: How many times to repeat each prompt.
@@ -237,8 +203,6 @@ def benchmark_model_concurrent(
 
     # Warmup once
     if not skip_warmup:
-        from llm_benchmark.backends import create_backend
-        backend = create_backend()
         warmup_model(backend, model_name, timeout)
     else:
         console.print(
@@ -260,6 +224,7 @@ def benchmark_model_concurrent(
             )
 
             batch = run_concurrent_batch(
+                backend=backend,
                 model=model_name,
                 prompt=prompt,
                 n=num_workers,

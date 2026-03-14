@@ -221,6 +221,28 @@ class OllamaBackend:
         except (_OllamaRequestError, _OllamaResponseError, ConnectionError):
             return False
 
+    def get_model_layers(self, model: str) -> int | None:
+        """Detect the number of layers in a model from Ollama modelinfo.
+
+        Calls ``ollama.show()`` and searches modelinfo keys for any key
+        containing ``block_count`` (e.g. ``llama.block_count``).
+
+        Args:
+            model: Model name (e.g. "llama3:8b").
+
+        Returns:
+            Number of layers as int, or None if undetectable.
+        """
+        try:
+            info = ollama.show(model)
+            modelinfo = getattr(info, "modelinfo", None) or {}
+            for key, value in modelinfo.items():
+                if "block_count" in key:
+                    return int(value)
+        except Exception:
+            pass
+        return None
+
     def detect_context_window(self, model: str) -> int:
         """Detect the context window size for a model.
 

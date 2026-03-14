@@ -174,13 +174,15 @@ def _mode_custom(models: list) -> argparse.Namespace:
     )
 
 
-def run_interactive_menu(models: list) -> argparse.Namespace:
+def run_interactive_menu(backend, models: list) -> argparse.Namespace:
     """Display the interactive menu and return a populated Namespace.
 
     Parameters
     ----------
+    backend:
+        Backend instance for system summary and model downloads.
     models:
-        List of Ollama model objects returned by ``run_preflight_checks``.
+        List of model dicts returned by ``run_preflight_checks``.
 
     Returns
     -------
@@ -195,13 +197,13 @@ def run_interactive_menu(models: list) -> argparse.Namespace:
     console.print()
     console.print("[bold]LLM Benchmark[/bold]")
     console.print()
-    console.print(format_system_summary())
+    console.print(format_system_summary(backend=backend))
     console.print()
 
     # Offer model downloads if RAM allows recommendations
     from llm_benchmark.recommend import offer_model_downloads
 
-    models = offer_model_downloads(models)
+    models = offer_model_downloads(backend, models)
     console.print()
 
     # Menu

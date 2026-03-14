@@ -105,7 +105,7 @@ def filter_already_installed(
     return [m for m in recommended if m["name"] not in installed_set]
 
 
-def offer_model_downloads(installed_models: list, *, force: bool = False) -> list:
+def offer_model_downloads(backend, installed_models: list, *, force: bool = False) -> list:
     """Interactive prompt to download recommended models.
 
     Called from the interactive menu after system info display.  Detects
@@ -114,8 +114,10 @@ def offer_model_downloads(installed_models: list, *, force: bool = False) -> lis
 
     Parameters
     ----------
+    backend:
+        Backend instance for re-fetching installed models after pull.
     installed_models:
-        Model objects returned by ``ollama.list()`` (preflight).
+        Model dicts from ``backend.list_models()`` (preflight).
 
     Returns
     -------
@@ -230,11 +232,8 @@ def offer_model_downloads(installed_models: list, *, force: bool = False) -> lis
     if not pulled_any:
         return installed_models
 
-    # Re-fetch installed models
-    import ollama as ollama_client
-
+    # Re-fetch installed models via backend
     try:
-        response = ollama_client.list()
-        return response.models
+        return backend.list_models()
     except Exception:
         return installed_models

@@ -210,6 +210,7 @@ def _handle_run(args: argparse.Namespace) -> int:
                 f"[bold]{model_name}[/bold] ({idx + 1}/{len(models)})"
             )
             result = run_sweep_for_model(
+                backend=backend,
                 model_name=model_name,
                 timeout=args.timeout,
                 skip_warmup=args.skip_warmup,
@@ -283,6 +284,7 @@ def _handle_run(args: argparse.Namespace) -> int:
                 f"[bold]{model_name}[/bold] ({idx + 1}/{len(models)})"
             )
             batches = benchmark_model_concurrent(
+                backend=backend,
                 model_name=model_name,
                 prompts=prompts,
                 num_workers=num_workers,
@@ -417,10 +419,12 @@ def _handle_compare(args: argparse.Namespace) -> int:
 
 def _handle_info(_args: argparse.Namespace) -> int:
     """Handle the 'info' subcommand."""
+    from llm_benchmark.backends import create_backend
     from llm_benchmark.system import get_system_info
 
     console = get_console()
-    info = get_system_info()
+    backend = create_backend()
+    info = get_system_info(backend=backend)
 
     console.rule("[bold]System Information[/bold]")
     console.print(f"  [bold]CPU:[/bold]     {info.cpu}")
@@ -471,18 +475,20 @@ def main(argv: list[str] | None = None) -> int:
     # --recommend: show all recommended models (force mode)
     if args_list == ["--recommend"]:
         try:
+            from llm_benchmark.backends import create_backend
             from llm_benchmark.preflight import run_preflight_checks
             from llm_benchmark.recommend import offer_model_downloads
             from llm_benchmark.system import format_system_summary
 
             console = get_console()
-            models = run_preflight_checks()
+            backend = create_backend()
+            models = run_preflight_checks(backend=backend)
             console.print()
             console.print("[bold]LLM Benchmark — Model Recommender[/bold]")
             console.print()
-            console.print(format_system_summary())
+            console.print(format_system_summary(backend=backend))
             console.print()
-            offer_model_downloads(models, force=True)
+            offer_model_downloads(backend, models, force=True)
             return 0
         except KeyboardInterrupt:
             get_console().print("\n[yellow]Interrupted.[/yellow]")
@@ -491,11 +497,13 @@ def main(argv: list[str] | None = None) -> int:
     # No-args: launch interactive menu
     if not args_list:
         try:
+            from llm_benchmark.backends import create_backend
             from llm_benchmark.menu import run_interactive_menu
             from llm_benchmark.preflight import run_preflight_checks
 
-            models = run_preflight_checks()
-            args = run_interactive_menu(models)
+            backend = create_backend()
+            models = run_preflight_checks(backend=backend)
+            args = run_interactive_menu(backend, models)
             set_debug(False)
             return _handle_run(args)
         except KeyboardInterrupt:
