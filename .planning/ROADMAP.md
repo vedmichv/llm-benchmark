@@ -54,11 +54,11 @@ Plans:
 **Plans:** 5/5 plans complete
 
 Plans:
-- [ ] 06-01-PLAN.md -- Implement LlamaCppBackend and LMStudioBackend core classes with tests
-- [ ] 06-02-PLAN.md -- Backend detection, auto-start, and platform-specific install instructions
-- [ ] 06-03-PLAN.md -- CLI --backend flag, create_backend() factory, and generalized preflight checks
-- [ ] 06-04-PLAN.md -- Backend-aware export filenames, system summary with backend inventory
-- [ ] 06-05-PLAN.md -- Interactive menu backend selection and error handling UX
+- [x] 06-01-PLAN.md -- Implement LlamaCppBackend and LMStudioBackend core classes with tests
+- [x] 06-02-PLAN.md -- Backend detection, auto-start, and platform-specific install instructions
+- [x] 06-03-PLAN.md -- CLI --backend flag, create_backend() factory, and generalized preflight checks
+- [x] 06-04-PLAN.md -- Backend-aware export filenames, system summary with backend inventory
+- [x] 06-05-PLAN.md -- Interactive menu backend selection and error handling UX
 
 ### Phase 7: Cross-Backend Comparison
 **Goal**: Students can compare the same model across all backends side-by-side and see which runtime is fastest on their hardware
@@ -70,6 +70,12 @@ Plans:
   3. Full matrix mode (N models x M backends) produces a comparison table with winner highlighted per model and an overall recommendation
   4. "Compare backends" appears as menu option 5 in the interactive menu
   5. README includes multi-backend quick start, per-OS setup guides for all 3 backends, and a real cross-backend comparison output example
+**Plans:** 3 plans
+
+Plans:
+- [ ] 07-01-PLAN.md -- Comparison module: orchestration, display (bar chart + matrix), export (JSON + Markdown)
+- [ ] 07-02-PLAN.md -- CLI --backend all and menu option 5 wiring
+- [ ] 07-03-PLAN.md -- README multi-backend setup guides and comparison example
 
 ## Progress
 
@@ -83,5 +89,5 @@ Phases execute in numeric order: 5 -> 6 -> 7
 | 3. Advanced Benchmarking | v1.0 | 4/4 | Complete | 2026-03-13 |
 | 4. Student Experience | v1.0 | 3/3 | Complete | 2026-03-13 |
 | 5. Backend Abstraction | v2.0 | 3/3 | Complete | 2026-03-14 |
-| 6. New Backends | 5/5 | Complete   | 2026-03-14 | - |
-| 7. Cross-Backend Comparison | v2.0 | 0/? | Not started | - |
+| 6. New Backends | v2.0 | 5/5 | Complete | 2026-03-14 |
+| 7. Cross-Backend Comparison | v2.0 | 0/3 | Planning | - |
