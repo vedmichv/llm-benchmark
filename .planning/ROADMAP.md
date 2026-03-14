@@ -1,98 +1,75 @@
 # Roadmap: LLM Benchmark v2
 
-## Overview
+## Milestones
 
-Transform the existing LLM benchmark tool from a working-but-fragile single-script prototype into a reliable, consolidated Python package that students can clone and run on any platform. The journey moves from stabilizing the foundation (consolidation, cross-platform, pre-flight checks), through measurement reliability (warmup, retry, correct metrics), into advanced benchmarking capabilities (concurrent mode, parameter sweep, analysis), and finishes with student-facing polish (interactive menu, visual results, tests, CI).
+- v1.0 Benchmark Tool - Phases 1-4 (shipped 2026-03-13)
+- v2.0 Multi-Backend Benchmark - Phases 5-7 (in progress)
 
 ## Phases
 
-**Phase Numbering:**
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+<details>
+<summary>v1.0 Benchmark Tool (Phases 1-4) - SHIPPED 2026-03-13</summary>
 
-Decimal phases appear between their surrounding integers in numeric order.
+- [x] **Phase 1: Foundation** - Consolidate codebase into package structure with cross-platform stability and pre-flight checks
+- [x] **Phase 2: Measurement Reliability** - Warmup, retry, correct averaging, organized output
+- [x] **Phase 3: Advanced Benchmarking** - Concurrent mode, parameter sweep, results analysis
+- [x] **Phase 4: Student Experience** - Interactive menu, visual results, shareable reports, tests, CI
 
-- [x] **Phase 1: Foundation** - Consolidate codebase into package structure with cross-platform stability and pre-flight checks (completed 2026-03-12)
-- [ ] **Phase 2: Measurement Reliability** - Ensure benchmark numbers are accurate with warmup, retry, correct averaging, and organized output
-- [ ] **Phase 3: Advanced Benchmarking** - Add concurrent mode, parameter sweep, and results analysis capabilities
-- [ ] **Phase 4: Student Experience** - Interactive CLI, visual results, shareable reports, tests, and CI
+</details>
+
+### v2.0 Multi-Backend Benchmark
+
+- [ ] **Phase 5: Backend Abstraction** - Extract Backend Protocol and OllamaBackend adapter with zero user-visible change
+- [ ] **Phase 6: New Backends** - Add llama.cpp and LM Studio backends with CLI integration and cross-platform support
+- [ ] **Phase 7: Cross-Backend Comparison** - Full comparison mode with matrix benchmarking, reports, and documentation
 
 ## Phase Details
 
-### Phase 1: Foundation
-**Goal**: Students can install and run the tool on any platform without crashes, with clear errors when something is wrong
-**Depends on**: Nothing (first phase)
-**Requirements**: STAB-01, STAB-02, STAB-03, STAB-04, STAB-05, STAB-06, QUAL-01, QUAL-02, QUAL-05
+### Phase 5: Backend Abstraction
+**Goal**: The entire codebase talks to a Backend protocol instead of Ollama directly, with zero behavior change for existing users
+**Depends on**: Phase 4
+**Requirements**: BACK-01, BACK-02, BACK-03, BACK-04, BACK-05
 **Success Criteria** (what must be TRUE):
-  1. Student can clone the repo and run `python -m llm_benchmark` on Windows, macOS, or Linux without import errors or platform crashes
-  2. If Ollama is not running, the tool prints a clear message telling the student how to start it (not a stack trace)
-  3. If the student's machine has insufficient RAM for a selected model, they see a warning before the benchmark starts
-  4. There is one benchmark module (no confusion between benchmark.py and extended_benchmark.py)
-  5. The project uses Python 3.10+ with Pydantic 2.x and has a proper package layout (llm_benchmark/)
-**Plans**: 3 plans
+  1. Running `python -m llm_benchmark run` produces identical output to v1.0 -- no user-visible change whatsoever
+  2. All 152+ existing tests pass without modification to test assertions (only import paths may change)
+  3. `runner.py` contains zero direct `ollama.chat()` calls -- all inference goes through a Backend instance
+  4. A `BackendResponse` model exists that normalizes all timing data to seconds, and OllamaBackend converts nanoseconds internally
+**Plans**: TBD
 
-Plans:
-- [x] 01-01-PLAN.md -- Package scaffold, pyproject.toml, data models, config, prompts
-- [ ] 01-02-PLAN.md -- Core benchmark runner, system info, exporters, compare
-- [ ] 01-03-PLAN.md -- CLI entry points, pre-flight checks, cleanup old files
-
-### Phase 2: Measurement Reliability
-**Goal**: Benchmark numbers are trustworthy -- warmup excludes cold-start overhead, transient failures retry automatically, and metrics are mathematically correct
-**Depends on**: Phase 1
-**Requirements**: BENCH-01, BENCH-02, BENCH-07, UX-04
+### Phase 6: New Backends
+**Goal**: Students can benchmark models on llama.cpp and LM Studio in addition to Ollama, with auto-detection and per-OS support
+**Depends on**: Phase 5
+**Requirements**: BEND-01, BEND-02, BEND-03, BEND-04, BEND-05, CLI-01, CLI-02, CLI-03, CLI-04, CLI-05, PLAT-01, PLAT-02, PLAT-03
 **Success Criteria** (what must be TRUE):
-  1. Running a benchmark shows a warmup pass before measurement begins, and the reported throughput excludes model load time
-  2. If Ollama returns a transient error mid-benchmark, the tool retries automatically (up to configurable limit) instead of crashing
-  3. When prompt caching is detected (prompt_eval_count = -1), the affected metrics are excluded from averages with a visible note
-  4. All result files (JSON, CSV, Markdown) are saved into a results/ directory, not the project root
-**Plans**: 2 plans
+  1. Student can run `python -m llm_benchmark run --backend llama-cpp` and get benchmark results with native timing metrics from llama-server
+  2. Student can run `python -m llm_benchmark run --backend lm-studio` and get benchmark results with native timing metrics from LM Studio
+  3. Running with no `--backend` flag defaults to Ollama with no change in behavior (backward compatible)
+  4. When multiple backends are installed, the interactive menu shows detected backends and lets the user choose; when only Ollama is available, no backend prompt appears
+  5. If a backend is installed but not running, the tool attempts to auto-start it (ollama serve, llama-server, lms server start)
+**Plans**: TBD
 
-Plans:
-- [ ] 02-01-PLAN.md -- Warmup runs, tenacity retry logic, --skip-warmup and --max-retries CLI flags
-- [ ] 02-02-PLAN.md -- Cache visibility in terminal and exports, results/.gitignore, duplicate cleanup
-
-### Phase 3: Advanced Benchmarking
-**Goal**: Students can stress-test models with concurrent requests and automatically find the best configuration for their hardware
-**Depends on**: Phase 2
-**Requirements**: BENCH-03, BENCH-04, BENCH-05, BENCH-06, ANLZ-01, ANLZ-02, ANLZ-03
+### Phase 7: Cross-Backend Comparison
+**Goal**: Students can compare the same model across all backends side-by-side and see which runtime is fastest on their hardware
+**Depends on**: Phase 6
+**Requirements**: COMP-01, COMP-02, COMP-03, COMP-04, COMP-05, DOC-01, DOC-02
 **Success Criteria** (what must be TRUE):
-  1. Student can run `--concurrent N` and see aggregate throughput (total tokens/wall time) for N parallel requests to the same model
-  2. Student can run `--sweep` and the tool automatically tests combinations of num_ctx and num_gpu, reporting the best configuration found
-  3. Student can sort benchmark results by any metric and filter to top-N models from saved results
-  4. Student can compare results from two different runs side-by-side to see how hardware or config changes affected performance
-**Plans**: 4 plans
-
-Plans:
-- [ ] 03-01-PLAN.md -- Concurrent benchmarking module (data models, async orchestration, tests)
-- [ ] 03-02-PLAN.md -- Parameter sweep module (num_ctx/num_gpu sweep, best config detection)
-- [ ] 03-03-PLAN.md -- Analyze subcommand and compare enhancements (sort, filter, arrows, winner)
-- [ ] 03-04-PLAN.md -- CLI wiring and mode-aware exporters (integrate all Phase 3 modules)
-
-### Phase 4: Student Experience
-**Goal**: Students who have never used CLI tools can run benchmarks through an interactive menu, see visual ranked results, and share reports with classmates
-**Depends on**: Phase 3
-**Requirements**: UX-01, UX-02, UX-03, UX-05, UX-06, QUAL-03, QUAL-04
-**Success Criteria** (what must be TRUE):
-  1. Running the tool with no arguments presents an interactive menu (quick test / standard / full / custom) that requires no CLI knowledge
-  2. Quick test mode completes in roughly 30 seconds and confirms "everything works" with the smallest available model
-  3. After a benchmark completes, the student sees a ranked bar chart in the terminal showing model comparison
-  4. Results include system info, model rankings, and a recommendation for which model/config is best for this hardware
-  5. Unit tests exist with mocked Ollama covering core functions (>60% coverage) and GitHub Actions runs lint + tests on push
-**Plans**: 3 plans
-
-Plans:
-- [ ] 04-01-PLAN.md -- Interactive menu module and terminal bar chart display
-- [ ] 04-02-PLAN.md -- Enhanced Markdown reports with rankings, recommendations, and text bar charts
-- [ ] 04-03-PLAN.md -- Unit tests for new modules, ruff linting, pytest-cov, GitHub Actions CI
+  1. Student can run `--backend all` and the tool benchmarks the same prompts on every detected backend sequentially, producing a unified report
+  2. Comparison report shows a side-by-side bar chart (single model) or matrix table (N models x M backends) with a "fastest backend" winner per model
+  3. Full matrix mode (N models x M backends) produces a comparison table with winner highlighted per model and an overall recommendation
+  4. "Compare backends" appears as menu option 5 in the interactive menu
+  5. README includes multi-backend quick start, per-OS setup guides for all 3 backends, and a real cross-backend comparison output example
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4
+Phases execute in numeric order: 5 -> 6 -> 7
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Foundation | 3/3 | Complete   | 2026-03-12 |
-| 2. Measurement Reliability | 0/2 | Not started | - |
-| 3. Advanced Benchmarking | 0/4 | Not started | - |
-| 4. Student Experience | 2/3 | In Progress|  |
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Foundation | v1.0 | 3/3 | Complete | 2026-03-12 |
+| 2. Measurement Reliability | v1.0 | 2/2 | Complete | 2026-03-12 |
+| 3. Advanced Benchmarking | v1.0 | 4/4 | Complete | 2026-03-13 |
+| 4. Student Experience | v1.0 | 3/3 | Complete | 2026-03-13 |
+| 5. Backend Abstraction | v2.0 | 0/? | Not started | - |
+| 6. New Backends | v2.0 | 0/? | Not started | - |
+| 7. Cross-Backend Comparison | v2.0 | 0/? | Not started | - |

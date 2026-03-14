@@ -4,10 +4,10 @@ milestone: v2.0
 milestone_name: multi-backend
 status: active
 stopped_at: null
-last_updated: "2026-03-14T10:00:00Z"
-last_activity: 2026-03-14 -- Milestone v2.0 started
+last_updated: "2026-03-14T11:00:00Z"
+last_activity: 2026-03-14 -- Roadmap created for v2.0
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,43 +21,36 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-14)
 
 **Core value:** Student clones repo, runs one command, gets clear answer about their hardware's LLM capabilities.
-**Current focus:** Milestone v2.0 — Multi-Backend Benchmark
+**Current focus:** Phase 5 — Backend Abstraction (v2.0)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 5 of 7 (Backend Abstraction)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-03-14 — Milestone v2.0 started
+Status: Ready to plan
+Last activity: 2026-03-14 — v2.0 roadmap created (3 phases, 22 requirements)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [░░░░░░░░░░] 0% (v2.0)
 
 ## Performance Metrics
 
-**Velocity:**
-- Total plans completed: 5
-- Average duration: 5min
-- Total execution time: 0.5 hours
+**Velocity (from v1.0):**
+- Total plans completed: 12
+- Average duration: ~6 min
+- Total execution time: ~1.2 hours
 
-**By Phase:**
+**By Phase (v1.0):**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1-Foundation | 3/3 | 17min | 6min |
-| 2-Measurement-Reliability | 2/2 | 10min | 5min |
+| 2-Measurement | 2/2 | 10min | 5min |
+| 3-Advanced | 4/4 | 32min | 8min |
+| 4-Experience | 3/3 | 13min | 4min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4min), 01-02 (8min), 01-03 (5min), 02-01 (5min), 02-02 (5min)
-- Trend: Steady
-
-*Updated after each plan completion*
-| Phase 03 P01 | 7min | 2 tasks | 7 files |
-| Phase 03 P03 | 5min | 2 tasks | 3 files |
-| Phase 03 P02 | 5min | 1 tasks | 2 files |
-| Phase 03 P04 | 15min | 2 tasks | 2 files |
-| Phase 04 P01 | 3min | 2 tasks | 3 files |
-| Phase 04 P02 | 2min | 1 tasks | 1 files |
-| Phase 04 P03 | 8min | 2 tasks | 18 files |
+- v1.0 plans averaged 6min each
+- Trend: Stable
 
 ## Accumulated Context
 
@@ -66,49 +59,13 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Roadmap]: 4 phases derived from 27 requirements at coarse granularity
-- [Roadmap]: Foundation phase includes code consolidation + package structure + all stability requirements
-- [Research]: Add rich + tenacity as only new runtime dependencies; use AsyncClient for concurrency
-- [01-01]: Used model_validator(mode="before") for prompt_cached flag in OllamaResponse
-- [01-01]: Migrated all 11 prompts from extended_benchmark.py large set
-- [01-02]: Runner compute_averages() excludes prompt_cached results from prompt_eval calculations
-- [01-02]: Apple Silicon GPU detection returns integrated GPU label (unified memory)
-- [01-02]: Exporters use _result_to_dict helper for consistent JSON serialization
-- [01-03]: Preflight _get_system_ram_gb() duplicates system.py logic to avoid circular imports
-- [01-03]: CLI handlers use lazy imports for fast startup
-- [01-03]: run.py delegates via subprocess.call (no direct import)
-- [02-01]: Import ollama RequestError/ResponseError at module level to avoid mock interference
-- [02-01]: Dynamic tenacity retryer (not decorator) for runtime-configurable max_retries
-- [02-01]: Retry wraps outside timeout so each attempt gets full budget
-- [02-02]: Rich markup escape (\\[cached]) renders literal brackets in terminal
-- [02-02]: Auto-create .gitignore only for dirs named "results"
-- [02-02]: Removed duplicate compute_averages from models.py (runner.py is canonical)
-- [Phase 03]: Analyze returns void, prints to console only (no file export)
-- [Phase 03]: load_time computed from run-level load_duration_s averages
-- [Phase 03]: Winner column only for 2-file comparisons
-- [03-01]: AsyncClient used as async context manager for proper connection cleanup
-- [03-01]: Per-request try/except in _single_request rather than gather return_exceptions
-- [03-01]: aggregate_throughput_ts = sum(eval_count) / wall_time (not mean of rates)
-- [03-01]: auto_detect_concurrency thresholds: 8 (VRAM>=16), 4 (RAM>=32), 2 (default)
-- [Phase 03]: Import SweepConfigResult/SweepModelResult from models.py (Plan 01 created them)
-- [Phase 03]: Unload model between sweep configs to force Ollama reload with new num_ctx/num_gpu options
-- [03-04]: Mutually exclusive argparse group for --concurrent and --sweep
-- [03-04]: Standard exports include mode="standard" for forward compatibility
-- [03-04]: Sweep exports use sweep_ prefix; concurrent exports use benchmark_ prefix
-- [04-01]: Menu uses input() loop with EOFError/KeyboardInterrupt for clean exit
-- [04-01]: Quick test sorts models by size, picks smallest for ~30s run
-- [04-01]: Bar chart uses Unicode block chars (full/empty) for universal terminal support
-- [04-01]: render_text_bar_chart returns plain string for Markdown embedding
-- [04-01]: Concurrent bar chart averages aggregate_throughput_ts across batches per model
-- [Phase 04]: Lazy import of render_text_bar_chart in exporters to avoid circular imports
-- [Phase 04]: Concurrent rankings use max aggregate_throughput_ts per model across batches
-- [Phase 04]: Ignored E501 in ruff config due to long string literals in prompts/tests
-- [Phase 04]: Consolidated pytest into dev dep group, removed optional-deps test section
-- [Quick-1]: Import _get_ram_gb from system.py for shared RAM detection
-- [Quick-1]: Mock offer_model_downloads in menu tests to isolate input sequences
-- [Quick-2]: Use shutil.which for binary detection (stdlib, cross-platform)
-- [Quick-2]: try/except EOFError+KeyboardInterrupt on input() treats interrupts as decline
-- [Quick-2]: Post-install verification re-checks shutil.which to confirm success
+- [v2.0 Roadmap]: 3 phases at coarse granularity for 22 requirements
+- [v2.0 Roadmap]: Phase 5 is pure refactor — zero user-visible change, all tests pass
+- [v2.0 Roadmap]: PLAT requirements woven into Phase 6 (not separate phase)
+- [v2.0 Roadmap]: DOC requirements in Phase 7 alongside comparison feature
+- [Research]: httpx is the only new dependency (added in Phase 6)
+- [Research]: Native APIs only — OpenAI-compat endpoints strip timing data
+- [Research]: Backend Protocol (typing.Protocol), not ABC
 
 ### Pending Todos
 
@@ -116,17 +73,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- Phase 3: Ollama server behavior under concurrent load (queuing vs rejection) needs testing during implementation
-
-### Quick Tasks Completed
-
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 1 | Add model recommender to interactive menu | 2026-03-13 | 2777d57 | [1-add-model-recommender-to-interactive-men](./quick/1-add-model-recommender-to-interactive-men/) |
-| 2 | Add Ollama installation check to preflight | 2026-03-13 | f48ddfe | [2-add-ollama-installation-check-to-cli-sta](./quick/2-add-ollama-installation-check-to-cli-sta/) |
+- LM Studio `stats` object fields are MEDIUM confidence — validate against real server in Phase 6
+- llama.cpp `timings` field names need verification against real llama-server in Phase 6
+- llama.cpp single-model-per-server constraint requires special handling in runner
 
 ## Session Continuity
 
-Last session: 2026-03-13T15:27:52Z
-Stopped at: Completed quick-2-PLAN.md (Ollama installation check)
+Last session: 2026-03-14T11:00:00Z
+Stopped at: v2.0 roadmap created, ready to plan Phase 5
 Resume file: None
