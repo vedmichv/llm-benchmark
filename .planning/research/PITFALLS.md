@@ -1,307 +1,388 @@
-# Domain Pitfalls
+# Domain Pitfalls: Multi-Backend Integration
 
-**Domain:** LLM benchmarking tool (Ollama-based, student-facing, cross-platform)
-**Researched:** 2026-03-12
+**Domain:** Adding llama.cpp and LM Studio backends to an Ollama-based LLM benchmark tool
+**Researched:** 2026-03-14
+**Focus:** Integration pitfalls when extending existing Ollama-only architecture
+
+---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, incorrect data, or student frustration severe enough to abandon the tool.
+Mistakes that cause incorrect benchmark comparisons, data corruption, or rewrites of the abstraction layer.
 
-### Pitfall 1: Measuring Cold Load as Benchmark Performance
+### Pitfall 1: Timing Metric Units Mismatch Across Backends
 
-**What goes wrong:** The first inference request to a model includes model loading time (VRAM allocation, weight loading from disk). This can be 5-30 seconds depending on model size and hardware. If this is included in "tokens per second" metrics, the first run produces dramatically lower numbers than subsequent runs, corrupting averages.
+**What goes wrong:** Each backend reports timing in different units, and mixing them without normalization produces nonsensical cross-backend comparisons. Ollama reports durations in **nanoseconds** (integers), llama.cpp reports in **milliseconds** (floats) or pre-computed **tokens/second**, and LM Studio reports **tokens_per_second** directly in its `stats` object. If you feed llama.cpp millisecond values into the existing `_ns_to_sec()` function (which divides by 1,000,000,000), you get durations 1,000,000x too small, resulting in impossibly high throughput numbers.
 
-**Why it happens:** Ollama's `total_duration` field includes `load_duration` on the first request. Developers sum durations or take first-run data without separating model load from inference.
+**Why it happens:** The existing codebase has `_ns_to_sec()` in `models.py` and uses it everywhere: `runner.py` (compute_averages), `exporters.py` (all export functions). Developers wire up a new backend, pass its timing values through the same pipeline, and never notice the unit mismatch because the numbers look "plausible" at first glance (both are large integers).
 
-**Consequences:** Students see wildly inconsistent numbers between first and second runs. They conclude the tool is broken, or worse, make hardware conclusions based on bad data. The existing codebase already includes `load_duration` in `total_duration` reporting (benchmark.py line 113) without clearly separating it.
+**Consequences:** Cross-backend comparison reports show llama.cpp as 1,000,000x faster than Ollama. Students conclude their hardware is broken. Or worse, the numbers are off by a smaller factor (e.g., llama.cpp reports some timings in microseconds) and the error goes unnoticed, producing subtly wrong but believable comparisons.
+
+**Specific fields to normalize:**
+
+| Metric | Ollama | llama.cpp `/completion` | LM Studio `/api/v1/chat` |
+|--------|--------|------------------------|--------------------------|
+| Prompt eval time | `prompt_eval_duration` (ns) | `timings.prompt_ms` (ms) | Not directly exposed; compute from token counts |
+| Generation time | `eval_duration` (ns) | `timings.predicted_ms` (ms) | Not directly exposed; use `stats.tokens_per_second` |
+| Prompt tokens | `prompt_eval_count` | `timings.prompt_n` | `usage.prompt_tokens` |
+| Generated tokens | `eval_count` | `timings.predicted_n` | `usage.completion_tokens` |
+| Pre-computed t/s | Must compute manually | `timings.predicted_per_second` | `stats.tokens_per_second` |
+| Total duration | `total_duration` (ns) | Compute from component timings | Not directly exposed |
+| Load duration | `load_duration` (ns) | Not in response (separate endpoint) | Model load events in stream |
 
 **Prevention:**
-- Implement mandatory warmup run(s) before collecting metrics. At minimum, one throwaway request with `num_predict: 1` to force model load.
-- Exclude `load_duration` from throughput calculations (already partially done via separate `prompt_eval_duration` and `eval_duration`, but the `total_time` field still uses `total_duration` which includes load).
-- Clearly label first-run vs steady-state metrics in output.
+- Create a `NormalizedTimings` dataclass that all backends convert INTO, with fields in a single canonical unit (seconds as float). Each backend adapter is responsible for its own conversion.
+- NEVER pass raw backend values through the existing `_ns_to_sec()`. That function should only exist in the Ollama adapter.
+- Add a unit test that verifies: for the same model/prompt, cross-backend normalized timings are within the same order of magnitude (not a correctness test, a sanity test).
+- If a backend provides pre-computed `tokens_per_second` but not raw durations, compute the duration from `token_count / tokens_per_second` for consistency. Do NOT mix pre-computed rates from one backend with computed rates from another.
 
-**Warning signs:** Large variance between run 1 and run 2 for the same model/prompt. `load_duration` values > 1 second.
+**Detection:** Cross-backend comparison where one backend shows > 10x the throughput of another for the same model. This should trigger a warning.
 
-**Detection:** Compare first-run `total_ts` against subsequent runs. If ratio > 2x, warmup is not working.
-
-**Phase:** Should be addressed in the stability/accuracy phase (early). This is foundational to data quality.
+**Phase:** Must be the FIRST thing designed in the backend abstraction layer. The normalized response model is the foundation everything else builds on.
 
 ---
 
-### Pitfall 2: Prompt Caching Silently Corrupts Metrics
+### Pitfall 2: Model Identity Crisis -- Same Model, Different Names
 
-**What goes wrong:** Ollama caches prompt evaluation results. When the same prompt is sent to the same model twice, Ollama returns `prompt_eval_count: -1` and `prompt_eval_duration: 0` (or near-zero) on the second request. The current codebase silently converts -1 to 0, making prompt eval throughput appear as 0 t/s.
+**What goes wrong:** Cross-backend comparison requires matching "the same model" across backends, but each backend names models differently. Ollama uses registry-style names (`llama3.2:3b-instruct-q4_K_M`), llama.cpp uses bare GGUF filenames (`llama-3.2-3b-instruct-Q4_K_M.gguf`), and LM Studio uses a path-style identifier (`lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf`). There is no universal model ID.
 
-**Why it happens:** The current validator (benchmark.py lines 31-39) prints a warning but sets `prompt_eval_count = 0`. Downstream calculations then produce `0 / duration = 0 t/s` for prompt eval, and total throughput is also wrong because it only counts response tokens.
+**Why it happens:** Each backend has its own model management. Ollama pulls from its own registry with its own naming scheme. llama.cpp loads raw GGUF files. LM Studio downloads from Hugging Face with publisher/repo/file hierarchy. A developer building cross-backend comparison will try to string-match these names and it will fail for all but the simplest cases.
 
-**Consequences:** With `runs_per_prompt > 1` (extended_benchmark.py default is 2), the second run always has corrupted prompt eval metrics. Averages are dragged down. Students see misleading numbers suggesting prompt processing is extremely slow.
+**Specific naming examples for the SAME model:**
 
-**Prevention:**
-- For multi-run benchmarks: either (a) vary prompts slightly between runs (add invisible whitespace or unique prefix), or (b) explicitly mark cached runs and exclude prompt eval metrics from their averages, or (c) unload and reload the model between runs to clear the KV cache.
-- Never silently convert -1 to 0. Store it as a distinct "cached" state.
-- Calculate averages only from non-cached prompt eval values.
-
-**Warning signs:** `prompt_eval_count` returning -1 or 0 on any run after the first.
-
-**Detection:** Flag in result output when prompt caching is detected. Add a `cached: bool` field to BenchmarkResult.
-
-**Phase:** Must be fixed in the accuracy/measurement phase. This is the most impactful data-quality bug in the existing codebase.
-
----
-
-### Pitfall 3: Concurrent Requests Competing for GPU Memory
-
-**What goes wrong:** When adding concurrent benchmark mode (parallel requests), multiple simultaneous requests to Ollama compete for GPU VRAM. Ollama serializes requests internally for a single model, but if concurrent tests hit different models, Ollama may try to load multiple models simultaneously, causing OOM errors, model offloading to CPU, or Ollama crashes.
-
-**Why it happens:** Developers implement concurrency at the Python level (threading/asyncio) without understanding that Ollama has its own model scheduling. Ollama's `OLLAMA_NUM_PARALLEL` setting controls concurrent request handling per model, but cross-model concurrency is constrained by VRAM.
-
-**Consequences:** Benchmarks crash midway. Students with limited VRAM (8GB) see OOM errors. Worse: Ollama silently falls back to CPU inference when VRAM is exhausted, producing dramatically different (slower) numbers that look like the model is just slow.
-
-**Prevention:**
-- Concurrent testing should ONLY test multiple simultaneous requests to the SAME model (aggregate throughput). Never load multiple models concurrently.
-- Before concurrent tests, check available VRAM and warn if < model size + overhead.
-- Set `OLLAMA_NUM_PARALLEL` explicitly and document it.
-- Monitor `ollama ps` during concurrent runs to verify model stays GPU-resident.
-- Add a `--concurrent N` flag with sensible defaults (2-4) and a max cap.
-
-**Warning signs:** Sudden drops in t/s during concurrent runs. Ollama returning errors about memory. `ollama ps` showing models on CPU when they should be on GPU.
-
-**Detection:** Pre-flight check: query model size from `ollama show <model>`, compare against available VRAM.
-
-**Phase:** Concurrent testing phase. Must be carefully designed from the start, not bolted onto sequential logic.
-
----
-
-### Pitfall 4: Windows/WSL Path and Process Confusion
-
-**What goes wrong:** Students on Windows may have Ollama installed natively (Windows service) or inside WSL. The Python tool may run natively on Windows or inside WSL. These four combinations (native Python + native Ollama, WSL Python + WSL Ollama, WSL Python + native Ollama, native Python + WSL Ollama) each behave differently. Lock files, temp paths, subprocess calls, and network endpoints all vary.
-
-**Why it happens:** The codebase uses Unix-isms: `/tmp/` for lock files (line 59 of extended_benchmark.py), `os.kill(pid, 0)` for process checking (line 71), `journalctl` for logs (line 358), `sysctl` for system info. These work differently or not at all on native Windows.
+| Backend | Model identifier |
+|---------|-----------------|
+| Ollama | `qwen2.5:7b` or `qwen2.5:7b-instruct-q4_K_M` |
+| llama.cpp | `qwen2.5-7b-instruct-q4_k_m.gguf` |
+| LM Studio | `Qwen/Qwen2.5-7B-Instruct-GGUF/qwen2.5-7b-instruct-q4_k_m.gguf` |
 
 **Consequences:**
-- Lock file path `/tmp/ollama_benchmark.lock` does not exist on native Windows (should use `tempfile.gettempdir()` -- actually already does via the constant, but the error messages print Unix-style `rm` commands).
-- `os.kill(pid, 0)` on Windows raises `PermissionError` for running processes, not `OSError` -- behavior differs from Unix.
-- Students get confusing error messages telling them to run `rm /tmp/...` when they are on Windows.
-- WSL Python connecting to native Windows Ollama requires `OLLAMA_HOST=http://host.docker.internal:11434` or similar -- not documented.
+- Cross-backend comparison fails to match models, showing separate entries instead of side-by-side.
+- Worse: fuzzy matching incorrectly pairs different quantizations (Q4_K_M vs Q8_0) or different model sizes (7B vs 3B), making the comparison meaningless.
+- Students manually specifying model names must remember three different naming conventions.
 
 **Prevention:**
-- Use `tempfile.gettempdir()` consistently (already done for the constant, but error messages should use it too).
-- Abstract PID checking into a cross-platform function.
-- Detect WSL (check `/proc/version` for "microsoft" or "WSL") and adjust Ollama connection accordingly.
-- Replace `rm` commands in error messages with platform-appropriate instructions.
-- Test all three platforms in CI.
+- Do NOT attempt automatic fuzzy matching for cross-backend comparison. It will be wrong more often than right.
+- Use a **model mapping file** or **CLI flag** approach: `--model "qwen2.5:7b" --llama-cpp-model "path/to/qwen2.5-7b.gguf" --lm-studio-model "Qwen/..."`. Explicit is better than magic.
+- For display purposes, extract a **canonical short name** from each backend's identifier (e.g., strip paths, strip `.gguf`, normalize separators) but ONLY for display, never for matching.
+- Store the original backend-specific model identifier in results so comparisons are auditable.
+- For the interactive menu: let students select a model from each backend's available list, then manually confirm the pairing.
 
-**Warning signs:** Students reporting "lock file" errors on Windows. "Ollama not found" errors in WSL when Ollama is installed on Windows host.
+**Detection:** Cross-backend comparison with zero matched models = mapping is broken. Warning: "No models matched across backends. Use --model-map to specify which models to compare."
 
-**Detection:** CI matrix with Windows, macOS, and Linux. Manual testing on WSL.
-
-**Phase:** Cross-platform stability phase. Should be one of the first things addressed.
+**Phase:** Backend abstraction layer phase. Model identity is part of the protocol interface.
 
 ---
 
-### Pitfall 5: Averaging Throughput Rates Incorrectly
+### Pitfall 3: Using OpenAI-Compatible Endpoints Instead of Native APIs
 
-**What goes wrong:** The current code averages tokens-per-second values across runs: `avg_response_ts = sum(r.response_ts) / len(runs)`. This is mathematically wrong when runs have different token counts or durations. The correct approach is `total_tokens / total_time`, not `mean(tokens/time)`.
+**What goes wrong:** Both llama.cpp and LM Studio expose OpenAI-compatible endpoints (`/v1/chat/completions`). It is tempting to use these because the request/response format is familiar and a single HTTP client could work for both. But these endpoints strip backend-specific timing metrics. The OpenAI response format has `usage.prompt_tokens` and `usage.completion_tokens` but NO duration/timing fields. You get token counts but cannot compute tokens/second.
 
-**Why it happens:** Averaging rates (ratios) is a common statistical error. If run 1 produces 100 tokens at 50 t/s (2 seconds) and run 2 produces 10 tokens at 10 t/s (1 second), the naive average is 30 t/s. The correct weighted average is 110 tokens / 3 seconds = 36.7 t/s.
+**Why it happens:** Developer sees OpenAI-compatible endpoint, thinks "great, one client for everything," implements it, and only discovers the missing timing data when cross-backend comparison shows 0 t/s for everything except Ollama. This is explicitly documented in the project's own research (PROJECT.md line 73: "Each backend uses different native endpoint (NOT OpenAI-compat -- that strips timing data)").
 
-**Consequences:** Results are biased toward runs with fewer tokens. Short responses disproportionately influence the average. Students comparing models may get misleading rankings.
+**Consequences:** The core purpose of the tool (measuring tokens/second) is completely broken for non-Ollama backends. Results show token counts but no throughput. The entire backend integration is useless.
 
 **Prevention:**
-- Calculate aggregate throughput as `sum(all_tokens) / sum(all_durations)` for each metric.
-- If averaging rates, use harmonic mean or weighted average by token count.
-- Display both per-run and aggregate metrics so students can see variance.
+- Use ONLY native endpoints for each backend:
+  - Ollama: `/api/chat` (current, correct)
+  - llama.cpp: `/completion` (NOT `/v1/chat/completions`)
+  - LM Studio: `/api/v1/chat` (NOT `/v1/chat/completions`)
+- Each backend adapter builds its own HTTP request and parses its own response format. No shared request/response shape.
+- Add an integration test per backend: assert that the response contains timing data, not just token counts.
+- Document in the backend protocol: "Implementations MUST return timing durations, not just token counts."
 
-**Warning signs:** Average t/s that does not match manual calculation from total tokens and total time.
+**Detection:** Any benchmark result where `eval_duration` (or equivalent) is 0 or None for a non-Ollama backend = wrong endpoint.
 
-**Detection:** Add a sanity check: compare `avg_ts` against `total_tokens / total_time`. Flag if they differ by more than 5%.
+**Phase:** First thing validated when implementing each backend adapter. Test with real server before building anything else.
 
-**Phase:** Accuracy/measurement phase. Should be fixed alongside the prompt caching issue.
+---
+
+### Pitfall 4: Backend Server Not Running -- Cascading Failures
+
+**What goes wrong:** The existing preflight check (`preflight.py`) calls `ollama.list()` and exits if it fails. With multiple backends, a student might have Ollama running but not llama.cpp server, or vice versa. If the tool tries to benchmark on a dead backend, it either hangs (connection timeout), crashes, or produces confusing errors.
+
+**Why it happens:** The current architecture assumes ONE backend (Ollama) and treats its absence as fatal (`sys.exit(1)`). With multiple backends, some might be available and others not. The existing "all-or-nothing" preflight pattern does not work.
+
+**Specific backend connection details:**
+
+| Backend | Default address | Health check | Failure mode |
+|---------|----------------|--------------|--------------|
+| Ollama | `http://localhost:11434` | `GET /api/tags` or `ollama.list()` | ConnectionError |
+| llama.cpp | `http://localhost:8080` | `GET /health` | ConnectionError, or 503 if model loading |
+| LM Studio | `http://localhost:1234` | `GET /api/v1/models` | ConnectionError |
+
+**Consequences:**
+- Tool hangs for 30+ seconds on connection timeout to dead backend.
+- If `--backend all` is specified, one dead backend kills the entire run.
+- Students do not know which backend failed or how to start it.
+- llama.cpp has a unique state: `/health` returns 503 while model is loading (not dead, just not ready). Treating this as "not running" is wrong.
+
+**Prevention:**
+- Preflight checks must be **per-backend** and **non-fatal for optional backends**:
+  - `--backend ollama`: Ollama must be running (fatal if not).
+  - `--backend llama-cpp`: llama.cpp server must be running (fatal if not).
+  - `--backend all`: Check each, report which are available, benchmark only available ones.
+- Set connection timeout to 3 seconds (not the default 200s benchmark timeout).
+- For llama.cpp: retry `/health` for up to 10 seconds if it returns 503 (model loading).
+- Print backend-specific start instructions on failure:
+  - Ollama: `ollama serve`
+  - llama.cpp: `llama-server -m /path/to/model.gguf --port 8080`
+  - LM Studio: "Open LM Studio and start the local server"
+- Auto-detect running backends: probe all three default ports at startup, report what is available.
+
+**Detection:** Backend health check returning non-200 or timing out. Should be detected in < 5 seconds, not 200 seconds.
+
+**Phase:** Preflight checks phase. Must be redesigned before any backend runs benchmarks.
+
+---
+
+### Pitfall 5: llama.cpp Loads One Model Per Server Instance
+
+**What goes wrong:** Ollama is a model manager -- it loads/unloads models on demand. You start Ollama once, then benchmark any model. llama.cpp server is fundamentally different: each server instance loads exactly ONE model at startup (`llama-server -m model.gguf`). To benchmark a different model, you must stop the server and restart with the new model file.
+
+**Why it happens:** The existing codebase assumes a model management layer exists. `check_available_models()` lists models from `ollama.list()`. `unload_model()` calls `keep_alive=0`. `benchmark_model()` iterates over multiple models in a loop. None of this translates to llama.cpp.
+
+**Consequences:**
+- The tool tries to benchmark model B on a llama.cpp server that only has model A loaded. The request either fails or (worse) silently benchmarks model A and labels it as model B.
+- Students expect to benchmark multiple GGUF files in one run and cannot.
+- Attempting to restart llama.cpp server programmatically requires subprocess management, is fragile, and may require elevated privileges.
+
+**Prevention:**
+- The backend protocol MUST declare a `model_management` capability:
+  - Ollama: `MULTI_MODEL` -- can load/unload models on demand.
+  - llama.cpp: `SINGLE_MODEL` -- one model per server, must query which model is loaded.
+  - LM Studio: `MULTI_MODEL` -- can load/unload via `/api/v1/models/load` and `/api/v1/models/unload`.
+- For `SINGLE_MODEL` backends: query the loaded model at preflight, benchmark ONLY that model, skip the model iteration loop.
+- Do NOT attempt to restart llama.cpp server programmatically. Instead, tell the student: "llama.cpp has model X loaded. To benchmark model Y, restart the server with `llama-server -m Y.gguf`."
+- For cross-backend comparison: verify that all backends have the equivalent model loaded before starting.
+
+**Detection:** llama.cpp `/health` or `/props` endpoint reports the loaded model. Compare against requested model name.
+
+**Phase:** Backend abstraction layer. The protocol must account for this from the start or the entire multi-model loop breaks.
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 6: Daemon Threads Leaking on Timeout
+### Pitfall 6: Warmup Behavior Differs Across Backends
 
-**What goes wrong:** The `run_with_timeout()` function (extended_benchmark.py lines 124-143) starts daemon threads. When a timeout occurs, the thread is abandoned (still running in the background). The Ollama request continues consuming resources. Over a long benchmark session with multiple timeouts, zombie threads accumulate.
+**What goes wrong:** The existing warmup (`warmup_model()` in `runner.py`) sends a short prompt via `ollama.chat()` to pre-load the model into GPU memory. For llama.cpp, the model is loaded at server startup, so warmup means something different (filling KV cache, JIT compilation on some platforms). For LM Studio, model loading can happen on first request or via explicit `/api/v1/models/load`.
 
 **Prevention:**
-- Use `concurrent.futures.ThreadPoolExecutor` with proper cancellation.
-- After timeout, call `ollama.abort()` or unload the model to force-stop the in-flight request.
-- Track active threads and warn if count exceeds a threshold.
-- Consider subprocess-based isolation for individual benchmark runs (each run in a child process that can be killed).
+- Each backend adapter should implement its own `warmup()` method:
+  - Ollama: send short prompt (current behavior, correct).
+  - llama.cpp: send short prompt to warm compute kernels. Model is already loaded.
+  - LM Studio: call `/api/v1/models/load` explicitly if model not loaded, then send short prompt.
+- The warmup method should be part of the backend protocol, not a shared function that calls backend-specific APIs.
 
-**Phase:** Concurrent testing phase. Thread management must be solid before adding concurrency.
+**Phase:** Backend protocol design. Include `warmup()` in the protocol interface.
 
 ---
 
-### Pitfall 7: No Control Over Generation Length
+### Pitfall 7: Context Window Defaults Differ Silently
 
-**What goes wrong:** Without setting `num_predict`, different models generate wildly different response lengths for the same prompt. One model might produce 50 tokens, another 2000. This makes throughput comparisons misleading because longer responses are more "warmed up" (higher sustained t/s) while shorter ones include more startup overhead per token.
+**What goes wrong:** The existing `detect_num_ctx()` queries Ollama's `ollama.show()` API to determine context size. llama.cpp uses whatever `--ctx-size` (default: 4096 historically, but changed to 0 = model's trained max in recent versions) was passed at server startup. LM Studio has per-request `context_length`. If backends use different effective context sizes, throughput comparisons are invalid -- larger context = more VRAM for KV cache = potentially slower generation.
 
 **Prevention:**
-- Add `--max-tokens` parameter that sets `num_predict` in Ollama options.
-- For fair comparison benchmarks, set a fixed token count (e.g., 256 or 512).
-- For "natural" benchmarks, let models generate freely but report token counts prominently alongside t/s.
-- Always display response token count next to throughput so students understand the relationship.
+- Each backend adapter must report its effective context size.
+  - Ollama: `detect_num_ctx()` (existing, works).
+  - llama.cpp: query `/props` endpoint which returns `default_generation_settings.n_ctx`.
+  - LM Studio: query model info or set explicitly per request.
+- For cross-backend comparison: either enforce the same `num_ctx` across all backends, or clearly label the context size in results so students know the comparison is apples-to-oranges.
+- WARNING: Recent llama.cpp (post-2025) defaults to `--ctx-size 0` meaning "use model's full trained context." This can be 128K+ for models like Llama 3.1, consuming enormous VRAM. Students will OOM without understanding why.
 
-**Warning signs:** Large variance in `eval_count` across models for the same prompt. Models with short responses appearing slower.
+**Detection:** If cross-backend context sizes differ by more than 2x, print a warning.
 
-**Phase:** Parameter sweep phase. Natural integration point when adding configurable Ollama options.
+**Phase:** Backend protocol. Each adapter must expose effective context size.
 
 ---
 
-### Pitfall 8: ANSI Color Codes Breaking on Windows CMD
+### Pitfall 8: Prompt Format Differences Cause Unfair Comparisons
 
-**What goes wrong:** The current `run.py` uses Unicode symbols (checkmark, warning sign, info symbol) and ANSI escape codes. On Windows CMD (not PowerShell, not Windows Terminal), these render as garbage characters. The `Colors.disable()` method (line 27) checks for `ANSICON` but not for Windows Terminal or modern PowerShell which DO support ANSI.
+**What goes wrong:** Ollama's `/api/chat` applies the model's chat template automatically (system prompt, BOS/EOS tokens, role markers). llama.cpp's `/completion` endpoint is a raw completion endpoint -- it does NOT apply chat templates unless you use `/v1/chat/completions` (which strips timing data -- Pitfall 3). LM Studio's native `/api/v1/chat` does apply templates.
+
+**Consequences:** The same user prompt sent to Ollama and llama.cpp may result in different actual token sequences. Ollama wraps it in `<|start|>system\nYou are a helpful assistant<|end|>\n<|start|>user\n{prompt}<|end|>\n<|start|>assistant\n` while llama.cpp receives it raw. This affects both prompt token count and generation behavior, making throughput numbers non-comparable.
 
 **Prevention:**
-- Use `os.environ.get('WT_SESSION')` to detect Windows Terminal.
-- Use `colorama` library or check `sys.stdout.isatty()` combined with terminal capability detection.
-- Replace Unicode symbols with ASCII fallbacks on unsupported terminals: checkmark -> `[OK]`, warning -> `[WARN]`, info -> `[INFO]` (partially already done in extended_benchmark.py).
-- Test output in: Windows CMD, PowerShell, Windows Terminal, macOS Terminal, Linux terminal.
+- For llama.cpp `/completion`: manually apply the model's chat template before sending. llama.cpp server has a `/apply-template` endpoint (or the template can be set at server startup with `--chat-template`).
+- Alternatively, use llama.cpp's `/v1/chat/completions` ONLY for the actual request (to get template application), but extract timing from a parallel call to `/completion` -- this is complex and fragile. Better: apply template client-side.
+- Document this clearly: "For fair comparison, ensure all backends use the same prompt template."
+- Store the actual tokenized prompt length in results so students can verify parity.
 
-**Phase:** Cross-platform stability phase.
+**Phase:** Backend adapter implementation. Each adapter's `run_benchmark()` must handle template application.
 
 ---
 
-### Pitfall 9: Ollama API Version Drift
+### Pitfall 9: Streaming vs Non-Streaming Response Format Differences
 
-**What goes wrong:** The Ollama Python SDK is unpinned in requirements.txt. Ollama server updates independently of the SDK. Response field names, streaming behavior, and error types can change between versions. The code assumes specific response structure (e.g., `last_element.get("message", {}).get("content", "")` on line 532 of extended_benchmark).
+**What goes wrong:** The existing code has two paths: streaming (verbose mode) and non-streaming. For Ollama, the final streaming chunk contains timing data. For llama.cpp, streaming chunks have incremental timing in each chunk, and the final chunk has aggregate timings. For LM Studio, streaming returns Server-Sent Events with timing in the final `[DONE]`-adjacent message.
+
+If the streaming implementation assumes Ollama's format (timing only in last chunk), it will miss timing data from llama.cpp's per-chunk updates or LM Studio's event format.
 
 **Prevention:**
-- Pin `ollama>=0.4.0,<1.0.0` in requirements.txt (or whatever the current stable range is).
-- Use the Pydantic model validation as a safety net (already done, which is good).
-- Add a startup version check: query `ollama --version` and warn if outside tested range.
-- When Ollama SDK returns `ChatResponse` objects (newer versions), handle both dict and object access patterns (partially done with `model_dump()` fallback).
+- For benchmarking, use non-streaming mode by default for all backends. Streaming adds latency measurement complexity (TTFT vs total throughput) and format differences.
+- If verbose/streaming mode is needed, each backend adapter must implement its own stream parser.
+- NEVER share a streaming parser across backends.
 
-**Warning signs:** `ValidationError` from Pydantic on response parsing. `AttributeError` on response objects.
-
-**Phase:** Stability phase. Pin versions early, add version checking early.
+**Phase:** Backend adapter implementation. Start with non-streaming, add streaming per-backend later.
 
 ---
 
-### Pitfall 10: Students Not Having Models Pulled
+### Pitfall 10: httpx vs ollama SDK -- Two HTTP Client Patterns
 
-**What goes wrong:** Students clone the repo, run the tool, and get "no models found" or immediate failures because they have not pulled any models with `ollama pull`. The tool lists all installed models, finds zero, and either errors out or produces empty results.
+**What goes wrong:** The existing codebase uses the `ollama` Python SDK which handles connection management, retries, and response parsing internally. New backends will use `httpx` for direct HTTP calls. Mixing two HTTP client libraries creates inconsistent timeout behavior, error types, and connection pool management.
+
+**Specific differences:**
+
+| Behavior | `ollama` SDK | `httpx` |
+|----------|-------------|---------|
+| Timeout | Thread-based wrapper (current `run_with_timeout`) | Native `timeout` parameter |
+| Errors | `ollama.RequestError`, `ollama.ResponseError` | `httpx.ConnectError`, `httpx.TimeoutException` |
+| Connection | Managed internally | Must create/close `httpx.Client` |
+| Retry | Tenacity wrapper (current) | Must implement or wrap with tenacity |
 
 **Prevention:**
-- Pre-flight check: if `ollama list` returns zero models, print clear instructions with specific model recommendations for their hardware tier.
-- Suggest small models for low-RAM systems: `ollama pull qwen2.5:1.5b` (needs ~2GB).
-- Add `--auto-pull` flag that pulls a default small model if none exists.
-- Include hardware-based recommendations: "You have 8GB RAM, recommended models: ..." in pre-flight output.
+- Each backend adapter handles its own HTTP client internally. The backend protocol returns normalized results, hiding the transport layer.
+- Timeout management should be per-backend: Ollama uses the existing thread-based timeout (because the SDK does not support native timeouts well), httpx backends use `httpx.Client(timeout=...)`.
+- Error handling: each adapter catches its own exceptions and converts to a common `BackendError` or returns a failed `BenchmarkResult`.
+- The `_is_retryable()` function must be per-backend since error types differ.
+- Connection lifecycle: `httpx.Client` should be created once per benchmark session (in adapter `__init__`) and closed after, not per-request.
 
-**Warning signs:** Zero models returned from `ollama list`. Students posting "nothing happens" issues.
-
-**Phase:** Student UX phase. Critical for first-run experience.
+**Phase:** Backend abstraction layer. Each adapter is self-contained.
 
 ---
 
-### Pitfall 11: Parameter Sweep Combinatorial Explosion
+### Pitfall 11: Qwen 3.5 MoE Hang -- The Motivating Bug
 
-**What goes wrong:** When implementing parameter sweeps (auto-exploring `num_ctx`, `num_gpu`, `temperature`), the number of combinations grows multiplicatively. 3 models x 4 context sizes x 3 GPU layer counts x 3 temperatures = 108 benchmark runs. At 2-5 minutes each, that is 3-9 hours.
+**What goes wrong:** This is a known Ollama bug (issues #14579, #14662) where Qwen 3.5 MoE models hang indefinitely during inference. The model loads but never produces output. The existing 200-second timeout eventually fires, but the student waits 3+ minutes per prompt for nothing, and the model is reported as "Timeout after 200s" rather than "known Ollama bug."
+
+**Why this matters for multi-backend:** This is the PRIMARY motivation for adding llama.cpp support. Qwen 3.5 MoE works correctly and fast (5-7x faster than expected Ollama performance) in llama.cpp. If the multi-backend implementation does not handle this case well, the main value proposition is lost.
 
 **Prevention:**
-- Default sweep should be minimal: 2-3 values per parameter, only sweep one parameter at a time.
-- Add `--sweep-budget` parameter (max total runs or max time).
-- Show estimated runtime before starting sweep and require confirmation.
-- Use Latin hypercube sampling or similar for multi-parameter exploration instead of full grid search.
-- Make `temperature` NOT part of throughput sweeps (it does not affect inference speed, only output quality). Only sweep parameters that affect performance: `num_ctx`, `num_gpu`, `num_batch`.
+- When Ollama times out on a model that is known to hang (maintain a list of affected models, or detect the pattern: load succeeds but zero tokens generated), suggest: "This model may not work in Ollama. Try `--backend llama-cpp` instead."
+- For cross-backend comparison: if Ollama fails/times out on a model, still show the llama.cpp result rather than omitting the entire model from comparison.
+- Do NOT increase the timeout to "give Ollama more time" -- the hang is infinite. 200 seconds is already too long for a known hang. Consider a shorter initial timeout (30s) for the first few tokens, then extend.
 
-**Warning signs:** Sweep taking more than 30 minutes on a student machine. Students killing the process midway.
+**Detection:** Model loads successfully (warmup seems to work) but benchmark produces zero tokens. This is the hang pattern.
 
-**Phase:** Parameter sweep phase. Design the interface to prevent misuse.
+**Phase:** Early in backend integration. Test with Qwen 3.5 MoE as the primary validation case.
 
 ---
 
-### Pitfall 12: Thermal Throttling Corrupting Long Benchmarks
+### Pitfall 12: SystemInfo Model Assumes Ollama Exists
 
-**What goes wrong:** During long benchmark sessions (especially parameter sweeps), GPU and CPU temperatures rise. Modern hardware throttles clock speeds at thermal limits. Later benchmark runs produce lower throughput than earlier ones, not because of the model or parameters, but because of hardware thermal state.
+**What goes wrong:** The `SystemInfo` Pydantic model has `ollama_version: str` as a required field. The `get_system_info()` function calls `get_ollama_version()` which runs `ollama --version`. If a student only uses llama.cpp (no Ollama installed), this field returns "Unknown" -- which is fine -- but the model and all exporters are structurally coupled to Ollama being the only backend.
+
+**Specific coupling points in current code:**
+- `SystemInfo.ollama_version` -- Ollama-specific field name
+- `format_system_summary()` -- prints "Ollama {version}" unconditionally
+- CSV exporter writes "Ollama" row in system info
+- Markdown exporter does not mention backend at all
+- JSON exporter does not record which backend produced each result
+- `BenchmarkResult.response` is typed as `OllamaResponse | None` -- the response model is literally named `OllamaResponse`
 
 **Prevention:**
-- Add optional temperature monitoring (nvidia-smi for GPU temp, platform-specific for CPU).
-- Between model benchmarks, add a configurable cooldown delay (default: 5-10 seconds).
-- Randomize benchmark order so thermal effects distribute evenly across models rather than penalizing later-tested models.
-- Flag results where GPU temp exceeded throttle threshold during the run.
-- Document in output: "Model X was tested at position N in the queue."
+- Rename `OllamaResponse` to `BackendResponse` (or create a new normalized model and keep `OllamaResponse` as an internal Ollama adapter type).
+- Add `backend: str` field to `BenchmarkResult` so results record which backend produced them.
+- Change `SystemInfo.ollama_version` to `backend_versions: dict[str, str]` (e.g., `{"ollama": "0.6.1", "llama_cpp": "b4567"}`).
+- Update all exporters to include backend information per-result.
+- This is a significant refactor. Plan it carefully or the diffs will be enormous and break all 152 tests.
 
-**Warning signs:** Gradual decline in t/s across sequential models. Last-tested model consistently scoring lowest.
+**Phase:** Backend abstraction layer, but staged carefully. Rename models first, then update exporters, then tests. Do not attempt in one commit.
 
-**Detection:** Compare first-model vs last-model scores across multiple benchmark sessions with reversed order.
+---
 
-**Phase:** Accuracy/measurement phase. At minimum, add cooldown between models.
+### Pitfall 13: Port Conflicts Between Backends
+
+**What goes wrong:** Students run all three backends simultaneously for comparison. Default ports: Ollama 11434, llama.cpp 8080, LM Studio 1234. But llama.cpp's default port 8080 conflicts with many common services (web servers, proxies). If a student also runs a web dev server on 8080, llama.cpp silently fails to start or the benchmark tool connects to the wrong service.
+
+**Prevention:**
+- Support `--llama-cpp-host`, `--lm-studio-host` CLI flags for custom endpoints.
+- Environment variables as fallback: `LLAMA_CPP_HOST`, `LM_STUDIO_HOST` (similar to Ollama's `OLLAMA_HOST`).
+- Health check should verify the response is actually from the expected backend (e.g., llama.cpp `/health` returns a specific JSON shape, not a random web server's 200 OK).
+
+**Phase:** CLI and configuration phase.
 
 ---
 
 ## Minor Pitfalls
 
-### Pitfall 13: Lock File Path in Error Messages is Not Cross-Platform
+### Pitfall 14: llama.cpp Server Build Variations
 
-**What goes wrong:** Error messages (extended_benchmark.py line 75) print `rm {LOCK_FILE}` which shows a Unix-style `rm` command. Windows students do not have `rm`.
+**What goes wrong:** llama.cpp server compiled with different backends (CUDA, Metal, Vulkan, CPU-only) reports different capabilities and performance. A student's Homebrew-installed `llama-server` might be CPU-only on macOS (missing Metal support), producing dramatically slower results that they attribute to the model rather than the build.
 
-**Prevention:** Use `platform.system()` to show `del` on Windows, `rm` on Unix. Or just say "Delete the file at: {path}".
+**Prevention:** Query `/props` or `/health` to detect compute backend. Display in system info: "llama.cpp server (Metal)" vs "llama.cpp server (CPU)". On macOS, warn if Metal is not detected.
 
-**Phase:** Cross-platform stability phase.
-
----
-
-### Pitfall 14: CSV Export Lacks Proper Escaping
-
-**What goes wrong:** If prompts contain commas, quotes, or newlines, CSV output may be malformed. The current code uses Python's `csv` module (which handles this correctly), but any manual string concatenation for CSV would break.
-
-**Prevention:** Always use the `csv` module's `writer` for CSV output. Never manually format CSV strings. Test with prompts containing commas and quotes.
-
-**Phase:** Export/reporting phase. Verify with edge-case prompts.
+**Phase:** System info and preflight phase.
 
 ---
 
-### Pitfall 15: Ollama Connection Errors Not Distinguished from Model Errors
+### Pitfall 15: LM Studio Model Download and Load Latency
 
-**What goes wrong:** When Ollama is not running, the Python SDK throws a `ConnectionError`. When a model fails to load (too large for RAM), Ollama returns a different error. Both are currently caught by broad `except Exception` blocks and reported as "Benchmark error" without distinguishing the cause.
+**What goes wrong:** LM Studio can download models on demand. If a model is not yet downloaded, the first API call may trigger a download, taking minutes. The benchmark timeout fires and reports the model as failed, when it was actually downloading.
+
+**Prevention:** Check if model is loaded via `/api/v1/models` before benchmarking. If not loaded, call `/api/v1/models/load` explicitly and wait for the load event. If not downloaded, inform the student rather than timing out.
+
+**Phase:** LM Studio backend adapter implementation.
+
+---
+
+### Pitfall 16: Result File Format Backward Compatibility
+
+**What goes wrong:** Adding `backend` field to JSON results, changing `OllamaResponse` to a generic response type, and adding backend-specific timing fields breaks the `compare` and `analyze` subcommands for existing result files. Students who already have v1.0 results cannot compare them with v2.0 results.
 
 **Prevention:**
-- Catch `ConnectionError` / `httpx.ConnectError` specifically and print "Ollama is not running. Start it with `ollama serve`."
-- Catch `ollama.ResponseError` for model-specific issues and print the actual error message from Ollama.
-- Add pre-flight connectivity check before starting any benchmarks.
+- Design the JSON format to be additive: new fields are optional, old files parse correctly with defaults.
+- `backend` field defaults to `"ollama"` when missing (backward compat).
+- The compare subcommand should handle mixed-format files gracefully.
+- Version the result format: add `"format_version": 2` to new files.
 
-**Phase:** Stability phase. Better error messages are low-effort, high-impact.
-
----
-
-### Pitfall 16: num_ctx Not Factored Into Benchmark Comparisons
-
-**What goes wrong:** Different models have different default context window sizes (`num_ctx`). A model running with `num_ctx=2048` uses less VRAM and may be faster than the same model at `num_ctx=8192`. Students comparing models without controlling for context size are comparing apples to oranges.
-
-**Prevention:**
-- Query each model's default `num_ctx` via `ollama show <model>` and include it in results.
-- When comparing models, normalize by showing the effective context size.
-- In parameter sweep mode, make `num_ctx` the first parameter to explore.
-
-**Phase:** Parameter sweep phase.
+**Phase:** Exporter refactoring phase. Plan the JSON schema migration before writing code.
 
 ---
 
 ## Phase-Specific Warnings
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| Cross-platform stability | Windows path/process differences (#4, #8, #13) | Abstract platform-specific code into utility functions. CI matrix with all 3 OS. Test WSL explicitly. |
-| Measurement accuracy | Cold load (#1), prompt caching (#2), averaging math (#5) | Warmup runs, cache detection, weighted averages. These must be fixed before any other feature work -- bad data undermines everything. |
-| Concurrent testing | GPU memory contention (#3), thread leaks (#6) | Same-model-only concurrency, pre-flight VRAM check, proper thread lifecycle. |
-| Parameter sweeps | Combinatorial explosion (#11), thermal throttling (#12), context size (#16) | Budget caps, estimated runtime display, cooldown delays, randomized order. |
-| Student UX | No models installed (#10), confusing errors (#15) | Pre-flight checks, hardware-based model recommendations, specific error messages. |
-| Export/reporting | CSV edge cases (#14), misleading averages (#5) | Use csv module, display both per-run and aggregate metrics. |
-| Ollama SDK stability | API version drift (#9) | Pin SDK version, add version check at startup. |
+| Phase Topic | Likely Pitfall | Severity | Mitigation |
+|-------------|---------------|----------|------------|
+| Backend protocol design | Timing unit mismatch (#1), model identity (#2), model management differences (#5) | CRITICAL | Design normalized response model first. Protocol must declare capabilities (multi-model vs single-model). |
+| Ollama adapter refactoring | SystemInfo coupling (#12), OllamaResponse naming (#12), test breakage | CRITICAL | Rename types before adding new backends. Refactor in small PRs. Run tests after each rename. |
+| llama.cpp adapter | Wrong endpoint (#3), prompt template missing (#8), server restart needed (#5), build variations (#14) | HIGH | Validate timing data in first integration test. Apply chat template client-side. Query `/props` for model and backend info. |
+| LM Studio adapter | Wrong endpoint (#3), model download latency (#15), API version changes | MEDIUM | Verify `/api/v1/chat` returns stats object. Check model loaded state before benchmarking. |
+| Preflight redesign | All-or-nothing exits (#4), backend not running, port conflicts (#13) | HIGH | Per-backend health checks, non-fatal for optional backends, 3-second connection timeout. |
+| Cross-backend comparison | Model name mismatch (#2), context window differences (#7), prompt template differences (#8), timing normalization (#1) | CRITICAL | Explicit model mapping, enforce same num_ctx, normalize timings in adapter not in shared code. |
+| Exporter updates | Backward compatibility (#16), missing backend info in results | MEDIUM | Additive JSON schema, version field, default backend to "ollama". |
+| CLI changes | Port conflicts (#13), too many flags | LOW | Environment variable fallbacks, sensible defaults, interactive menu handles complexity. |
+
+## Pre-Integration Checklist
+
+Before writing any backend adapter code, verify:
+
+- [ ] Normalized response model defined (canonical units: seconds, not ns/ms)
+- [ ] Backend protocol includes: `health_check()`, `warmup()`, `run_benchmark()`, `list_models()`, `get_effective_context_size()`
+- [ ] Protocol declares model management capability (SINGLE_MODEL vs MULTI_MODEL)
+- [ ] `OllamaResponse` renamed or wrapped so new backends do not inherit Ollama-specific field names
+- [ ] `BenchmarkResult` has `backend: str` field
+- [ ] Each backend's native endpoint verified with real server (not just documented)
+- [ ] Timing field units documented per backend with conversion formulas
+- [ ] Existing 152 tests still pass after model renames
 
 ## Sources
 
-- Direct codebase analysis of benchmark.py, extended_benchmark.py, run.py
-- Known issues documented in .planning/codebase/CONCERNS.md
-- Ollama API behavior: prompt caching issue documented at https://github.com/ollama/ollama/issues/2068 (referenced in codebase)
-- Statistical averaging of rates: harmonic mean vs arithmetic mean is a well-established mathematical principle
-- Confidence: HIGH for codebase-specific pitfalls (direct code evidence), MEDIUM for Ollama behavioral pitfalls (based on API documentation and codebase comments), MEDIUM for cross-platform issues (based on codebase patterns and platform knowledge)
+- Direct codebase analysis of `runner.py`, `models.py`, `preflight.py`, `exporters.py`, `system.py`, `cli.py`
+- PROJECT.md context: native API endpoints, known Ollama bugs, architecture decisions
+- LM Studio REST API docs at lmstudio.ai/docs/api (MEDIUM confidence -- accessed 2026-03-14)
+- llama.cpp server API: training data knowledge of `/completion`, `/health`, `/props` endpoints (LOW-MEDIUM confidence -- could not access current docs due to rate limiting; verify against actual llama.cpp server before implementation)
+- Ollama API behavior: HIGH confidence (direct from working codebase and `ollama` SDK)
+- Model naming conventions: HIGH confidence (observable from each tool's CLI/API)
+
+**Confidence assessment:**
+- Timing normalization pitfalls: HIGH (verified from codebase analysis of `_ns_to_sec()` usage and known API formats)
+- Model identity pitfalls: HIGH (observable naming differences across backends)
+- llama.cpp specific details (endpoint paths, response field names): MEDIUM (verify with actual server)
+- LM Studio specific details (stats object fields): MEDIUM (docs accessed but field names should be verified)
+- Architectural coupling pitfalls: HIGH (direct from codebase -- every coupling point identified by reading actual code)
 
 ---
 
-*Pitfalls audit: 2026-03-12*
+*Pitfalls audit: 2026-03-14 -- Multi-backend integration focus*

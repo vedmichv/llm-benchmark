@@ -1,302 +1,529 @@
-# Architecture Patterns
+# Architecture: Multi-Backend Integration
 
-**Domain:** LLM benchmarking tool (Python CLI, Ollama-based)
-**Researched:** 2026-03-12
-**Confidence:** HIGH (based on direct codebase analysis + established Python patterns)
+**Domain:** LLM benchmarking tool -- adding llama.cpp and LM Studio backends
+**Researched:** 2026-03-14
+**Confidence:** HIGH (codebase analysis) / MEDIUM (llama.cpp/LM Studio API details from docs + PROJECT.md findings)
 
-## Current State
+## Current Architecture Snapshot
 
-The tool is split across two benchmark files (`benchmark.py` at 219 lines, `extended_benchmark.py` at 1114 lines) plus a comparison tool (`compare_results.py` at 223 lines) and a launcher (`run.py`). The extended benchmark file is a monolith containing: data models, system info collection, lock file management, timeout utilities, Ollama interaction, metric calculation, three output formatters, and CLI argument parsing -- all in one file. Code is duplicated between `benchmark.py` and `extended_benchmark.py` (Pydantic models, benchmark execution logic).
-
-## Recommended Architecture
-
-Refactor into a flat Python package with clear module boundaries. No deep nesting -- this is a CLI tool for students, not a framework.
+The existing codebase is a flat Python package with these key modules:
 
 ```
 llm_benchmark/
-    __init__.py          # Package version, public API
-    __main__.py          # Entry point: python -m llm_benchmark
-    cli.py               # Argument parsing, interactive menu, CLI output
-    models.py            # All Pydantic data models (single source of truth)
-    runner.py            # Core benchmark execution (single + batch)
-    ollama_client.py     # Ollama API wrapper (list models, chat, offload)
-    system_info.py       # Hardware/software detection
-    metrics.py           # Throughput calculation, averaging, validation
-    exporters/
-        __init__.py
-        markdown.py      # Markdown report generation
-        json.py          # JSON export
-        csv.py           # CSV export
-        html.py          # Future: HTML report
-    prompts.py           # Prompt set definitions and loading
-    results.py           # Result loading, comparison, analysis
-    utils.py             # Timeout wrapper, lock file, logging helpers
-run.py                   # Thin launcher (kept for backward compatibility)
-benchmark.py             # Deprecated wrapper -> imports from llm_benchmark
+    cli.py          # Argparse + dispatch to modes (standard, concurrent, sweep)
+    runner.py       # Benchmark execution -- directly calls ollama.chat()
+    concurrent.py   # Async concurrent mode -- directly calls ollama.AsyncClient
+    sweep.py        # Parameter sweep -- delegates to runner.py
+    models.py       # Pydantic models: OllamaResponse, BenchmarkResult, ModelSummary
+    preflight.py    # Ollama connectivity, model list, RAM checks
+    system.py       # Hardware detection, Ollama version
+    exporters.py    # JSON/CSV/Markdown writers
+    menu.py         # Interactive mode selection
+    config.py       # Constants, Rich console singleton
+    prompts.py      # Prompt sets
+    display.py      # Bar chart rendering
+    analyze.py      # Result analysis
+    compare.py      # Result comparison
+    recommend.py    # Model recommendations
 ```
 
-### Component Boundaries
+**Critical observation:** Ollama is deeply coupled into runner.py (imports `ollama` directly, calls `ollama.chat()` inline), concurrent.py (uses `ollama.AsyncClient`), preflight.py (calls `ollama.list()`, `ollama.show()`), system.py (gets `ollama --version`), and sweep.py (delegates to runner). There is no abstraction layer -- Ollama SDK calls are scattered across 5+ modules.
 
-| Component | Responsibility | Receives From | Sends To |
-|-----------|---------------|---------------|----------|
-| `cli.py` | Parse args, orchestrate flow, display progress | User input | `runner`, `exporters`, `system_info` |
-| `models.py` | Define all data structures | None (imported by all) | All modules |
-| `runner.py` | Execute benchmarks (single run, model sweep) | `cli.py` | `models.BenchmarkResult` |
-| `ollama_client.py` | All Ollama API calls (list, chat, offload, ps) | `runner.py`, `cli.py` | Raw API responses |
-| `system_info.py` | Detect CPU, RAM, GPU, OS, Ollama version | `cli.py` | `models.SystemInfo` |
-| `metrics.py` | Calculate t/s, averages, validate results | `runner.py` | `models.BenchmarkResult`, `models.ModelBenchmarkSummary` |
-| `exporters/*` | Serialize results to output formats | `cli.py` | Files on disk |
-| `prompts.py` | Provide prompt sets, load custom prompts | `cli.py` | `List[str]` |
-| `results.py` | Load past results, compare runs | `cli.py` | Comparison tables |
-| `utils.py` | Timeout, lock file, logging | Various | Various |
+## Recommended Architecture for Multi-Backend
 
-### Data Flow
+### Design: Backend Protocol + Registry
 
-```
-User CLI Input
-    |
-    v
-cli.py (parse args, select mode)
-    |
-    +---> system_info.py --> SystemInfo
-    |
-    +---> prompts.py --> List[str]
-    |
-    +---> ollama_client.py --> List[model_name]
-    |
-    v
-runner.py (for each model, for each prompt, for each run)
-    |
-    +---> ollama_client.py.chat() --> raw response
-    |
-    +---> metrics.py.calculate() --> BenchmarkResult
-    |
-    v
-runner.py collects List[BenchmarkResult]
-    |
-    +---> metrics.py.summarize() --> ModelBenchmarkSummary
-    |
-    v
-cli.py receives List[ModelBenchmarkSummary]
-    |
-    +---> exporters/markdown.py --> .md file
-    +---> exporters/json.py --> .json file
-    +---> exporters/csv.py --> .csv file
-    +---> stdout (progress + summary table)
-```
-
-**Key data types that flow through the system:**
-
-1. `OllamaResponse` -- validated raw API response (only used inside `runner.py` and `metrics.py`)
-2. `BenchmarkResult` -- one run's calculated metrics (the core data unit)
-3. `ModelBenchmarkSummary` -- aggregated results per model (what exporters consume)
-4. `SystemInfo` -- hardware snapshot (attached to exports)
-
-## Patterns to Follow
-
-### Pattern 1: Thin Ollama Wrapper
-
-Isolate all Ollama SDK calls behind `ollama_client.py`. This enables mocking for tests, handles SDK version changes in one place, and centralizes error handling for connection failures.
-
-**What:** Every `ollama.*` call goes through `ollama_client.py`. No other module imports `ollama` directly.
-
-**Why:** The Ollama SDK is unversioned and its response format could change. Wrapping it means one file to update when the SDK changes. It also makes testing trivial -- mock one module instead of patching calls scattered across files.
+Use a Python `Protocol` (PEP 544) rather than an ABC. This is lighter weight, doesn't require inheritance, and matches the project's constraint of keeping things simple for students.
 
 ```python
-# ollama_client.py
-import ollama
-from typing import List, Optional, Iterator
+# backends/base.py
+from typing import Protocol, runtime_checkable
 
-class OllamaClient:
-    """Wrapper around Ollama SDK for testability and error isolation."""
+@runtime_checkable
+class Backend(Protocol):
+    """Contract every inference backend must satisfy."""
 
-    def list_models(self) -> List[str]:
-        """Get names of all downloaded models."""
-        models = ollama.list().models
-        return [m.model for m in models]
+    name: str  # "ollama", "llama-cpp", "lm-studio"
 
-    def chat_stream(self, model: str, prompt: str) -> Iterator[dict]:
-        """Stream a chat response. Yields chunks."""
-        return ollama.chat(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            stream=True,
-        )
+    def is_available(self) -> bool:
+        """Check if this backend server is reachable."""
+        ...
 
-    def offload_model(self, model: str) -> None:
-        """Unload a model from memory."""
-        ollama.generate(model=model, prompt="", keep_alive=0)
+    def list_models(self) -> list[BackendModel]:
+        """Return models available on this backend."""
+        ...
 
-    def is_running(self) -> bool:
-        """Check if Ollama server is reachable."""
-        try:
-            ollama.list()
-            return True
-        except Exception:
-            return False
+    def chat(
+        self,
+        model: str,
+        prompt: str,
+        options: dict | None = None,
+    ) -> BackendResponse:
+        """Send prompt, return normalized response with timing metrics."""
+        ...
+
+    def unload_model(self, model: str) -> bool:
+        """Release model from memory. Return True on success."""
+        ...
 ```
 
-### Pattern 2: Calculation Separated from Collection
+**Why Protocol over ABC:** The existing OllamaClient code works without inheriting from anything. Protocol lets us type-check structurally (duck typing with teeth) while keeping implementations simple standalone classes. Students can understand `class OllamaBackend:` without needing to grok inheritance hierarchies.
 
-**What:** `runner.py` collects raw responses. `metrics.py` does all math. Runner never computes t/s directly.
+### New Normalized Response Model
 
-**Why:** The current code mixes response collection with metric calculation inside `run_single_benchmark()`. This makes it hard to add new metrics (like std deviation, percentiles) or change calculation logic without touching benchmark execution. Separation means you can add statistical analysis without modifying the runner.
+The key challenge: each backend reports timing in different formats and units. The solution is a `BackendResponse` Pydantic model that normalizes everything to seconds and token counts.
 
 ```python
-# metrics.py
-from models import OllamaResponse, BenchmarkResult
+# backends/base.py
+class BackendResponse(BaseModel):
+    """Normalized response from any backend. All durations in seconds."""
 
-def calculate_throughput(response: OllamaResponse, model: str, prompt: str) -> BenchmarkResult:
-    """Pure function: raw response in, calculated metrics out."""
-    prompt_eval_ts = (
-        response.prompt_eval_count / _ns_to_sec(response.prompt_eval_duration)
-        if response.prompt_eval_duration > 0 else 0
+    backend: str                    # "ollama" | "llama-cpp" | "lm-studio"
+    model: str                      # Model identifier (backend-specific)
+    content: str                    # Generated text
+    prompt_eval_count: int          # Input tokens processed
+    prompt_eval_duration_s: float   # Seconds to process prompt
+    eval_count: int                 # Output tokens generated
+    eval_duration_s: float          # Seconds to generate output
+    total_duration_s: float         # Total request duration in seconds
+    load_duration_s: float = 0.0    # Model load time in seconds
+    prompt_cached: bool = False     # Was prompt evaluation skipped?
+```
+
+**This is the central design decision.** Every backend adapter's job is to translate its native response into this normalized structure. Downstream code (runner.py, compute_averages, exporters) works exclusively with `BackendResponse` -- never with backend-specific data.
+
+### Timing Normalization Map
+
+| Field | Ollama | llama.cpp | LM Studio |
+|-------|--------|-----------|-----------|
+| **Source endpoint** | `/api/chat` | `/completion` | `/api/v1/chat` |
+| **prompt_eval_count** | `prompt_eval_count` (int) | `timings.prompt_n` (int) | Parsed from `usage.prompt_tokens` |
+| **prompt_eval_duration** | `prompt_eval_duration` (nanoseconds) | `timings.prompt_ms` (milliseconds) | Computed: `prompt_tokens / timings.prompt_per_second` |
+| **eval_count** | `eval_count` (int) | `timings.predicted_n` (int) | Parsed from `usage.completion_tokens` |
+| **eval_duration** | `eval_duration` (nanoseconds) | `timings.predicted_ms` (milliseconds) | Computed: `completion_tokens / stats.tokens_per_second` |
+| **total_duration** | `total_duration` (nanoseconds) | Sum of prompt_ms + predicted_ms | Wall clock measured by client |
+| **load_duration** | `load_duration` (nanoseconds) | Not reported (model pre-loaded) | Not reported |
+| **prompt_cached** | `prompt_eval_count == -1` | `timings.prompt_n == 0` | Not applicable |
+| **Rate fields** | Not provided (computed) | `timings.predicted_per_second` | `stats.tokens_per_second` |
+
+**Normalization strategy per backend:**
+
+- **Ollama:** Divide nanosecond values by 1,000,000,000 to get seconds. This is the existing `_ns_to_sec()` function.
+- **llama.cpp:** Divide millisecond values by 1,000 to get seconds. When rate fields are available (e.g., `predicted_per_second`), cross-validate with `predicted_n / (predicted_ms / 1000)`.
+- **LM Studio:** `stats.tokens_per_second` is a direct rate. Compute duration as `eval_count / tokens_per_second` for the normalized duration field. If `usage.prompt_tokens` and total time are available, derive prompt duration by subtraction.
+
+**Confidence note:** The llama.cpp `timings` object structure (prompt_n, prompt_ms, predicted_n, predicted_ms, predicted_per_second) is based on PROJECT.md research findings and training data. The LM Studio `stats.tokens_per_second` field was verified via official docs. MEDIUM confidence on exact field names -- validate against running servers during implementation.
+
+### Package Layout Changes
+
+```
+llm_benchmark/
+    backends/               # NEW package
+        __init__.py         # Registry: get_backend(), list_backends(), detect_backends()
+        base.py             # Backend Protocol, BackendResponse, BackendModel
+        ollama.py           # OllamaBackend (extract from runner.py + preflight.py)
+        llamacpp.py         # LlamaCppBackend (new, uses httpx)
+        lmstudio.py         # LMStudioBackend (new, uses httpx)
+    models.py               # MODIFIED: BenchmarkResult.response becomes BackendResponse
+    runner.py               # MODIFIED: accepts Backend instead of calling ollama directly
+    concurrent.py           # MODIFIED: accepts Backend
+    sweep.py                # MODIFIED: accepts Backend
+    preflight.py            # MODIFIED: delegates to Backend.is_available/list_models
+    system.py               # MODIFIED: backend-aware version detection
+    cli.py                  # MODIFIED: --backend flag, auto-detect
+    menu.py                 # MODIFIED: backend selection in interactive mode
+    exporters.py            # MODIFIED: include backend name in output
+    config.py               # MODIFIED: add DEFAULT_BACKEND, backend port constants
+    # Unchanged: prompts.py, display.py, analyze.py, compare.py, recommend.py
+```
+
+### Component Boundaries (New + Modified)
+
+| Component | Status | Responsibility | Communicates With |
+|-----------|--------|---------------|-------------------|
+| `backends/__init__.py` | NEW | Registry: resolve backend by name, auto-detect | cli.py, menu.py |
+| `backends/base.py` | NEW | Protocol definition, BackendResponse model | All backend implementations |
+| `backends/ollama.py` | NEW (extracted) | Ollama SDK wrapper, timing normalization (ns -> s) | runner.py via Protocol |
+| `backends/llamacpp.py` | NEW | HTTP client for llama.cpp /completion, timing normalization (ms -> s) | runner.py via Protocol |
+| `backends/lmstudio.py` | NEW | HTTP client for LM Studio /api/v1/chat, timing normalization | runner.py via Protocol |
+| `runner.py` | MODIFIED | Receives `Backend` instance, calls `backend.chat()` | backends via Protocol |
+| `models.py` | MODIFIED | BenchmarkResult uses BackendResponse instead of OllamaResponse | All modules |
+| `preflight.py` | MODIFIED | Delegates connectivity/model checks to backend | backends |
+| `cli.py` | MODIFIED | `--backend` flag, dispatches to correct backend | backends registry |
+| `exporters.py` | MODIFIED | Includes backend name in reports | No new deps |
+| `system.py` | MODIFIED | Reports versions for active backend | backends |
+
+### New Data Flow
+
+```
+CLI Input (--backend=llama-cpp)
+    |
+    v
+cli.py: resolve backend
+    |
+    +---> backends/__init__.py: get_backend("llama-cpp") -> LlamaCppBackend()
+    |
+    v
+preflight.py: backend.is_available()? backend.list_models()?
+    |
+    v
+runner.py: benchmark_model(backend=backend, model_name=..., ...)
+    |
+    +---> backend.chat(model, prompt) -> BackendResponse (normalized, in seconds)
+    |
+    +---> BenchmarkResult(response=backend_response)
+    |
+    v
+compute_averages(results)  # Works unchanged -- uses seconds-based fields
+    |
+    v
+exporters: export_json/csv/markdown  # Add backend field to output
+```
+
+## Integration Points: What Changes in Existing Code
+
+### 1. runner.py -- The Biggest Change
+
+**Current state:** `run_single_benchmark()` calls `ollama.chat()` directly (line 312) and constructs `OllamaResponse` via `OllamaResponse.model_validate(raw_response)` (line 359).
+
+**Required change:** Accept a `Backend` parameter and call `backend.chat()` instead. The `_parse_response` inner function is replaced by the backend's own normalization.
+
+```python
+# BEFORE (runner.py line 308-337)
+def _run_benchmark() -> dict:
+    response = ollama.chat(
+        model=model_name,
+        messages=[{"role": "user", "content": prompt}],
+        options=options,
     )
-    # ... rest of calculation
-    return BenchmarkResult(...)
+    return response
 
-def summarize_model(results: List[BenchmarkResult]) -> ModelBenchmarkSummary:
-    """Aggregate individual runs into a model summary."""
-    successful = [r for r in results if r.success]
-    # ... averaging logic
+# AFTER
+def _run_benchmark() -> BackendResponse:
+    return backend.chat(
+        model=model_name,
+        prompt=prompt,
+        options=options,
+    )
 ```
 
-### Pattern 3: Exporters as Pluggable Writers
+**Impact:** The `OllamaResponse` Pydantic model becomes internal to `backends/ollama.py`. `BenchmarkResult.response` changes type from `OllamaResponse | None` to `BackendResponse | None`.
 
-**What:** Each output format is an independent module with the same interface: `def export(summaries, system_info, output_path)`.
+**Functions that need the `backend` parameter threaded through:**
+- `run_single_benchmark()` -- core change
+- `benchmark_model()` -- passes backend to run_single_benchmark
+- `warmup_model()` -- calls backend.chat with short prompt
+- `unload_model()` -- calls backend.unload_model
+- `detect_num_ctx()` -- Ollama-specific, may not apply to other backends
 
-**Why:** Adding HTML reports or terminal bar charts requires zero changes to existing code. Just add a new file in `exporters/`.
+### 2. models.py -- Response Type Change
+
+**Current:** `BenchmarkResult.response: OllamaResponse | None`
+**After:** `BenchmarkResult.response: BackendResponse | None`
+
+The `_ns_to_sec()` helper becomes unnecessary in models.py since `BackendResponse` stores durations in seconds. However, `_ns_to_sec` is used in compute_averages and exporters, so it should be kept as-is until all callers are migrated.
+
+**Migration path:** Add `BackendResponse` to models.py (or import from backends.base). Keep `OllamaResponse` temporarily for backward compatibility. `BenchmarkResult.response` becomes a Union type during transition, then drops `OllamaResponse` once all backends are implemented.
+
+**Better approach:** Since `BackendResponse` stores values in seconds, add computed properties that match the current field access patterns:
 
 ```python
-# exporters/markdown.py
-from models import ModelBenchmarkSummary, SystemInfo
-from typing import List, Optional
+class BackendResponse(BaseModel):
+    eval_count: int
+    eval_duration_s: float
+    # ...
 
-def export(
-    summaries: List[ModelBenchmarkSummary],
-    output_path: str,
-    system_info: Optional[SystemInfo] = None
-) -> None:
-    """Write benchmark results as Markdown."""
-    with open(output_path, 'w') as f:
-        # ... formatting logic
+    @property
+    def eval_duration(self) -> int:
+        """Nanoseconds, for backward compatibility with existing code."""
+        return int(self.eval_duration_s * 1_000_000_000)
 ```
 
-### Pattern 4: Models as the Shared Contract
+This avoids a massive find-and-replace across runner.py, compute_averages, and exporters. Remove the shim properties once all callers are updated to use `_s` fields.
 
-**What:** `models.py` is the only module that every other module imports. It defines all Pydantic models. No circular dependencies.
+### 3. preflight.py -- Backend-Aware Checks
 
-**Why:** Currently, data models are duplicated across files. A single `models.py` eliminates duplication and serves as the schema documentation for the entire tool.
+**Current:** Hardcoded to `ollama.list()`, `ollama.show()`, `check_ollama_installed()`.
 
+**After:** Delegate to the selected backend:
+
+```python
+def run_preflight_checks(backend: Backend, skip_models=None, skip_checks=False):
+    # 1. Check if backend server is reachable
+    if not backend.is_available():
+        console.print(f"[red]Cannot connect to {backend.name}[/red]")
+        _print_setup_instructions(backend.name)
+        sys.exit(1)
+
+    # 2. Get available models
+    models = backend.list_models()
+    # ... filter, RAM checks, etc.
 ```
-models.py <--- imported by all
-    ^              |
-    |              v
-  (no module imports models.py AND is imported by models.py)
+
+Ollama-specific checks (install binary, `ollama serve` instructions) move into `backends/ollama.py` as helper methods.
+
+### 4. concurrent.py -- Backend-Aware Async
+
+**Current:** Uses `ollama.AsyncClient()` directly.
+
+**Challenge:** llama.cpp and LM Studio don't have Python SDK async clients. They use HTTP APIs.
+
+**Solution:** The Backend Protocol should include an `async_chat()` method, or concurrent.py should use `httpx.AsyncClient` directly through the backend. Simpler approach: add an optional `async_chat` method to the protocol. If not implemented, concurrent mode falls back to `ThreadPoolExecutor` with sync `backend.chat()`.
+
+```python
+# In concurrent.py
+async def _single_request(backend, model, prompt, ...):
+    if hasattr(backend, 'async_chat'):
+        return await backend.async_chat(model, prompt)
+    else:
+        # Fallback: run sync chat in thread pool
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, backend.chat, model, prompt)
 ```
+
+### 5. cli.py -- New --backend Flag
+
+Add `--backend` to the run parser:
+
+```python
+run_parser.add_argument(
+    "--backend",
+    choices=["ollama", "llama-cpp", "lm-studio", "auto"],
+    default="auto",
+    help="Inference backend (default: auto-detect)",
+)
+```
+
+The `auto` option checks which backends are running and uses the first available (preference: ollama > lm-studio > llama-cpp for backward compat).
+
+### 6. exporters.py -- Add Backend Field
+
+Minimal change: include `backend` in JSON output and CSV/Markdown headers. The `_result_to_dict` function adds `"backend": result.response.backend` to the dict.
+
+### 7. system.py -- Backend Version Detection
+
+**Current:** Hardcoded `get_ollama_version()` and `SystemInfo.ollama_version`.
+
+**After:** `SystemInfo` gains a `backend_versions: dict[str, str]` field. Or simpler: rename `ollama_version` to `backend_version` and populate from the active backend.
+
+## Model Naming Across Backends
+
+This is a significant pain point. Each backend uses different model identifiers:
+
+| Aspect | Ollama | llama.cpp | LM Studio |
+|--------|--------|-----------|-----------|
+| **Model ID format** | `llama3.2:1b` | GGUF file path or loaded model name | `llama-3.2-1b` or download slug |
+| **Listing** | `ollama list` / API | Files in model directory | `GET /api/v1/models` |
+| **Loading** | Automatic on first use | Must load via `/load` or `--model` flag | Auto-loads or via `/api/v1/load` |
+| **Same model check** | Exact name match | Filename-based | Slug-based |
+
+**Strategy: Canonical model names with backend-specific resolution.**
+
+```python
+class BackendModel(BaseModel):
+    """A model available on a specific backend."""
+    name: str           # Display name: "llama3.2:1b"
+    backend_id: str     # Backend-specific ID: path, slug, or name
+    backend: str        # "ollama", "llama-cpp", "lm-studio"
+    size_bytes: int | None = None
+    parameter_count: str | None = None  # "1B", "7B", etc.
+```
+
+For cross-backend comparison, users must specify which model to compare. The tool cannot automatically map "llama3.2:1b" (Ollama) to "/models/llama-3.2-1B-Q4_K_M.gguf" (llama.cpp). Instead:
+
+1. **Each backend lists its models independently.** The `list_models()` return includes the display name.
+2. **Cross-backend comparison is user-directed.** User selects which models to compare. The report shows model names with backend labels.
+3. **Optional: fuzzy matching helper.** A utility that suggests matches based on substrings (e.g., "llama3.2" appears in both backend model lists). This is a convenience, not a requirement.
+
+## Backend Implementation Details
+
+### OllamaBackend (Extract from Existing Code)
+
+- Wraps the `ollama` Python SDK (already a dependency)
+- `chat()`: calls `ollama.chat()`, converts nanosecond fields to seconds
+- `list_models()`: calls `ollama.list()`
+- `unload_model()`: calls `ollama.generate(keep_alive=0)`
+- `is_available()`: calls `ollama.list()` in try/except
+- `async_chat()`: uses `ollama.AsyncClient` (for concurrent mode)
+- Preserves all existing Ollama-specific behavior (prompt caching detection, num_ctx auto-detect)
+
+### LlamaCppBackend (New, HTTP via httpx)
+
+- Talks to `llama-server` (the llama.cpp HTTP server) at `http://localhost:8080` by default
+- `chat()`: POST to `/completion` with `{"prompt": prompt, "n_predict": -1}`
+- Native timing in `timings` object: `prompt_ms`, `predicted_ms`, `prompt_n`, `predicted_n`, `predicted_per_second`, `prompt_per_second`
+- Normalization: `ms / 1000.0` for durations
+- `list_models()`: GET `/props` returns the currently loaded model. llama.cpp loads one model at a time, so this returns a single-item list
+- `unload_model()`: Not needed (single model server). Return True.
+- `is_available()`: GET `/health` returns `{"status": "ok"}`
+- No async client needed initially -- httpx supports async natively
+
+**llama.cpp quirk:** The server loads exactly one model at startup (`--model path.gguf`). There's no model switching. For multi-model benchmarks, the user must restart the server with a different model, or the tool could automate this via subprocess.
+
+### LMStudioBackend (New, HTTP via httpx)
+
+- Talks to LM Studio's built-in server at `http://localhost:1234` by default
+- `chat()`: POST to `/api/v1/chat` with messages format
+- Response includes `stats.tokens_per_second` for generation rate
+- Normalization: derive `eval_duration_s = eval_count / stats.tokens_per_second`
+- `list_models()`: GET `/api/v1/models` returns loaded and available models
+- `unload_model()`: POST `/api/v1/unload` with model identifier
+- `is_available()`: GET `/api/v1/models` in try/except
+
+**LM Studio quirk:** It can load multiple models simultaneously (unlike llama.cpp). Model management is richer but the API is also more complex.
+
+### Backend Registry
+
+```python
+# backends/__init__.py
+_BACKENDS = {
+    "ollama": ("llm_benchmark.backends.ollama", "OllamaBackend"),
+    "llama-cpp": ("llm_benchmark.backends.llamacpp", "LlamaCppBackend"),
+    "lm-studio": ("llm_benchmark.backends.lmstudio", "LMStudioBackend"),
+}
+
+def get_backend(name: str, **kwargs) -> Backend:
+    """Lazy-import and instantiate a backend by name."""
+    module_path, class_name = _BACKENDS[name]
+    module = importlib.import_module(module_path)
+    cls = getattr(module, class_name)
+    return cls(**kwargs)
+
+def detect_backends() -> list[str]:
+    """Probe all known backends and return names of reachable ones."""
+    available = []
+    for name in _BACKENDS:
+        try:
+            backend = get_backend(name)
+            if backend.is_available():
+                available.append(name)
+        except Exception:
+            pass
+    return available
+```
+
+Lazy imports prevent `import httpx` from failing when httpx isn't installed (it's only needed for llama.cpp and LM Studio backends).
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: God Orchestrator
+### Anti-Pattern: OpenAI-Compatible Endpoints
 
-**What:** Putting all orchestration logic (model iteration, prompt iteration, run iteration, progress display, error handling) in `cli.py`.
+Both llama.cpp and LM Studio offer OpenAI-compatible `/v1/chat/completions` endpoints. Do NOT use them. The PROJECT.md explicitly states: "OpenAI endpoint strips timing data." The native endpoints return server-side timing metrics; the OpenAI-compat endpoints return only token counts without timing breakdown.
 
-**Why bad:** The current `main()` in `extended_benchmark.py` is 230 lines of orchestration. Moving it all to `cli.py` repeats the problem. Instead, `runner.py` should own the benchmark loop, and `cli.py` should call `runner.run_all(config)` and get results back.
+### Anti-Pattern: Backend-Specific Code in runner.py
 
-**Instead:** `cli.py` calls `runner.run_all_models(models, prompts, config)` which returns `List[ModelBenchmarkSummary]`. The runner owns iteration; the CLI owns display.
+Runner should never contain `if backend.name == "ollama": ...` branches. All backend-specific logic (timing normalization, model listing, connection handling) stays inside the backend class. Runner only calls Protocol methods.
 
-### Anti-Pattern 2: Deep Package Nesting
+### Anti-Pattern: Forcing All Backends to Support All Features
 
-**What:** Creating `llm_benchmark/core/engine/benchmark/runner.py` style hierarchies.
+llama.cpp doesn't support multi-model serving. LM Studio doesn't report nanosecond-level timing. Don't fake missing data or add unsupported features. Instead, document what each backend supports and handle gracefully:
 
-**Why bad:** This is a student-facing tool. Students need to understand and potentially modify the code. Deep nesting makes navigation confusing and imports verbose.
-
-**Instead:** Flat package. Every module at the same level. Max one level of nesting (only `exporters/` because it groups related but independent formatters).
-
-### Anti-Pattern 3: Abstract Base Classes for One Implementation
-
-**What:** Creating `BaseBenchmarkRunner`, `BaseExporter`, `BaseMetricsCalculator` with single concrete implementations.
-
-**Why bad:** Over-engineering. There is one runner (Ollama). There will not be a llama.cpp runner (out of scope per PROJECT.md). ABCs add complexity students must understand with no benefit.
-
-**Instead:** Simple functions and classes. If a second implementation is ever needed, refactor then.
-
-### Anti-Pattern 4: Event-Driven Progress Reporting
-
-**What:** Building a pub/sub event system for progress updates, logging, and status display.
-
-**Why bad:** Adds architectural complexity for something `print()` handles. Students should be able to read the code and understand it.
-
-**Instead:** Pass an optional `verbose: bool` or `on_progress: Callable` callback to the runner. Keep it simple.
-
-## Dependency Graph (Build Order)
-
-The dependency graph determines which modules must exist before others can be built. Build from the bottom up.
-
-```
-Layer 0 (no internal deps):
-    models.py
-    prompts.py
-    utils.py
-
-Layer 1 (depends on Layer 0):
-    ollama_client.py    (imports: models)
-    system_info.py      (imports: models)
-    metrics.py          (imports: models)
-
-Layer 2 (depends on Layer 1):
-    runner.py           (imports: models, ollama_client, metrics, utils)
-    exporters/*         (imports: models)
-    results.py          (imports: models)
-
-Layer 3 (depends on Layer 2):
-    cli.py              (imports: everything)
-    __main__.py         (imports: cli)
+```python
+class LlamaCppBackend:
+    def list_models(self) -> list[BackendModel]:
+        # Only returns the one currently loaded model
+        props = httpx.get(f"{self.base_url}/props").json()
+        return [BackendModel(
+            name=props.get("model_alias", "unknown"),
+            backend_id=props.get("model_path", "unknown"),
+            backend="llama-cpp",
+        )]
 ```
 
-### Suggested Build Order for Phases
+### Anti-Pattern: Shared HTTP Client Configuration
 
-1. **Phase: Extract Models + Utils** -- Create `models.py` (move all Pydantic models), `utils.py` (timeout, lock file, nanosec_to_sec), and `prompts.py` (prompt sets). These have zero internal dependencies. Both existing files can immediately import from them. This is the lowest-risk refactor.
+Don't create a generic `HTTPBackend` base class that both llama.cpp and LM Studio inherit from. Their APIs are different enough that shared HTTP plumbing creates more confusion than it saves. Each backend manages its own httpx client.
 
-2. **Phase: Extract Ollama Client + System Info** -- Create `ollama_client.py` (wrap all `ollama.*` calls) and `system_info.py` (move `collect_system_info()`). Requires `models.py` to exist. Enables mocked unit tests.
+## Dependency Impact
 
-3. **Phase: Extract Metrics + Runner** -- Create `metrics.py` (calculation logic) and `runner.py` (benchmark execution loop). Requires `ollama_client.py` and `models.py`. This is the core refactor -- splitting execution from calculation.
+### New Dependencies
 
-4. **Phase: Extract Exporters + Results** -- Create `exporters/` package (move three save functions) and `results.py` (move comparison logic from `compare_results.py`). Requires only `models.py`.
+| Package | Purpose | When Needed |
+|---------|---------|-------------|
+| `httpx` | HTTP client for llama.cpp and LM Studio | Only when those backends are used |
 
-5. **Phase: Create CLI + Entry Points** -- Create `cli.py` (argparse, orchestration), `__main__.py`. Deprecate `benchmark.py`. Update `run.py` to launch `python -m llm_benchmark`.
+**Installation strategy:** Make httpx an optional dependency:
 
-### Why This Order
+```toml
+# pyproject.toml
+dependencies = [
+    "ollama>=0.6",
+    "pydantic>=2.9",
+    "rich>=14.0",
+    "tenacity>=9.0",
+]
 
-- Layers 0 and 1 can be extracted without changing any behavior -- pure moves with import updates. Safe, testable, immediately reduces duplication.
-- Runner extraction (Layer 2) is the riskiest refactor because it touches the core benchmark loop. By the time you reach it, models, client, and metrics are already extracted and tested.
-- CLI comes last because it depends on everything else existing. Building it first would force placeholder imports.
+[project.optional-dependencies]
+all-backends = ["httpx>=0.27"]
+```
 
-## Scalability Considerations
+If a user tries `--backend llama-cpp` without httpx installed, the lazy import fails with a clear error: "httpx is required for llama-cpp backend. Install with: pip install llm-benchmark[all-backends]"
 
-| Concern | Current (1 file) | After Refactor (package) | Future (concurrent) |
-|---------|-------------------|--------------------------|---------------------|
-| Adding new metrics | Edit 1100-line file, find right section | Add to `metrics.py` (50-100 lines) | Same |
-| Adding output format | Add function to monolith | Add file in `exporters/` | Same |
-| Unit testing | Must mock inline Ollama calls | Mock `ollama_client.py` | Same |
-| Concurrent benchmarks | Not possible (sequential loop) | `runner.py` loop is isolated | Replace loop with `asyncio`/`concurrent.futures` in runner |
-| Parameter sweeps | Would add 200+ lines to monolith | New `sweep.py` module that imports `runner` | Parallelize sweep combinations |
-| Interactive menu | Would bloat main() further | Add to `cli.py` as separate mode | Same |
+**Alternative (simpler):** Just add httpx to core dependencies. It's lightweight (no C extensions), well-maintained, and students won't need to think about optional deps. Given the project's student audience, this is the better choice.
 
-## Key Architectural Decision: Package vs Flat Files
+## Suggested Build Order
 
-**Decision:** Python package (`llm_benchmark/`) with `__main__.py` entry point.
+Build from the bottom up, keeping the tool functional at every step.
 
-**Why not just split into flat files in the root?** The project already has `run.py`, `run.sh`, `run.bat`, `run.ps1`, `compare_results.py`, `test_ollama.py`, `setup_passwordless_sudo.sh` in the root. Adding 8+ more `.py` files to the root creates a mess. A package provides clear "this is the tool" vs "this is supporting infrastructure" separation.
+### Step 1: Backend Protocol + BackendResponse Model
+**New files:** `backends/__init__.py`, `backends/base.py`
+**Why first:** Defines the contract. Everything else depends on this.
+**Risk:** Low -- pure type definitions, no behavior changes.
 
-**Student impact:** `python -m llm_benchmark` is simple. `run.py` continues to work as the "just run it" entry point. Students who want to understand the code see a clean package with descriptive filenames.
+### Step 2: OllamaBackend (Extract)
+**New file:** `backends/ollama.py`
+**Modified:** Nothing yet -- OllamaBackend exists alongside current code.
+**Why second:** Proves the Protocol design works with known behavior. Write this as a wrapper around existing ollama SDK calls, test that it produces correct BackendResponse values by comparing against current OllamaResponse parsing.
+**Risk:** Low -- additive only.
+
+### Step 3: Wire runner.py to Use Backend
+**Modified:** `runner.py` (accept `backend` param), `models.py` (BackendResponse type)
+**Why third:** This is the critical integration point. Once runner.py works with OllamaBackend, the architecture is proven. All existing tests must still pass with Ollama as default backend.
+**Risk:** MEDIUM -- touches the core benchmark loop. Must preserve backward compatibility.
+
+### Step 4: Wire preflight.py, cli.py, menu.py
+**Modified:** `preflight.py`, `cli.py`, `menu.py`, `system.py`
+**Why fourth:** Thread the backend through the full CLI flow. `--backend ollama` works end-to-end.
+**Risk:** Low-medium -- plumbing changes, but behavior unchanged for default backend.
+
+### Step 5: LlamaCppBackend
+**New file:** `backends/llamacpp.py`
+**Modified:** `config.py` (add LLAMACPP_DEFAULT_PORT)
+**Why fifth:** Second backend proves the abstraction. Requires a running llama-server for integration testing.
+**Risk:** MEDIUM -- new HTTP client code, timing normalization to validate.
+
+### Step 6: LMStudioBackend
+**New file:** `backends/lmstudio.py`
+**Why sixth:** Third backend, same pattern. Requires LM Studio running for integration testing.
+**Risk:** Low (pattern established by step 5).
+
+### Step 7: Auto-Detection + Cross-Backend Comparison
+**Modified:** `backends/__init__.py` (detect_backends), `cli.py`, `exporters.py`
+**Why last:** Requires all backends to exist. Cross-backend comparison is a feature on top of the abstraction.
+**Risk:** Low -- uses established backend protocol.
+
+## Key Architectural Decisions Summary
+
+| Decision | Rationale |
+|----------|-----------|
+| Protocol over ABC | Lightweight, no inheritance needed, Pythonic |
+| BackendResponse normalizes to seconds | Avoids unit confusion; all downstream code works in one unit |
+| Lazy backend imports | Don't break `--backend ollama` if httpx isn't installed |
+| httpx as core dependency | Simpler for students than optional deps |
+| Native APIs only (not OpenAI-compat) | OpenAI endpoints strip timing metrics |
+| One backend class per file | Clear ownership, easy to find code |
+| Backend-specific quirks stay in backend class | Runner never branches on backend.name |
+| llama.cpp = single model server | Don't try to automate model switching; document the limitation |
+| Cross-backend comparison is user-directed | No automatic model name mapping across backends |
 
 ## Sources
 
-- Direct analysis of `/Users/viktor/Documents/GitHub/vedmich/llm-benchmark/` codebase (HIGH confidence)
-- Python packaging conventions from Python Packaging Authority documentation (HIGH confidence)
-- Standard patterns for CLI tool architecture in Python ecosystem (HIGH confidence)
+- Direct codebase analysis of llm_benchmark/ package (HIGH confidence)
+- PROJECT.md research findings on API endpoints and timing fields (MEDIUM-HIGH confidence)
+- LM Studio official docs at lmstudio.ai/docs/api (MEDIUM confidence -- verified stats.tokens_per_second field)
+- llama.cpp server API: timings object structure from PROJECT.md + training data (MEDIUM confidence -- field names need validation against running server)
+- Python Protocol (PEP 544) documentation (HIGH confidence)
 
 ---
 
-*Architecture research: 2026-03-12*
+*Architecture research: 2026-03-14*

@@ -1,126 +1,172 @@
-# Feature Landscape
+# Feature Landscape: Multi-Backend Benchmark Support
 
-**Domain:** LLM benchmarking tool for local models via Ollama (student-facing)
-**Researched:** 2026-03-12
-**Reference:** Current codebase + `alexziskind1/llama-throughput-lab` external repo
+**Domain:** Cross-backend LLM benchmarking (Ollama + llama.cpp + LM Studio)
+**Researched:** 2026-03-14
+**Scope:** NEW features only -- existing v1.0 features (interactive menu, bar charts, model recommender, concurrent mode, sweep mode, exports, 152 tests) are already shipped.
 
 ## Table Stakes
 
-Features users expect. Missing = product feels incomplete.
+Features users expect from a multi-backend benchmark tool. Missing any of these = the multi-backend story feels broken.
 
-| Feature | Why Expected | Complexity | Status | Notes |
-|---------|--------------|------------|--------|-------|
-| Single-model throughput (t/s) | Core purpose of any benchmark tool | Low | EXISTS | `benchmark.py` and `extended_benchmark.py` both do this |
-| Multi-model iteration | Users want to compare all installed models in one run | Low | EXISTS | Iterates `ollama list`, skip-list filtering |
-| Prompt eval + response + total metrics | Three distinct throughput numbers are standard (input processing, generation, combined) | Low | EXISTS | Nanosecond precision from Ollama API |
-| System info collection | Results without hardware context are meaningless for comparison | Med | EXISTS | CPU, RAM, GPU, Ollama version in `extended_benchmark.py` |
-| Multiple export formats | JSON for programmatic use, Markdown for sharing, CSV for spreadsheets | Med | EXISTS | JSON, Markdown, CSV all implemented |
-| Model offloading between benchmarks | Without unloading, cached model skews next model's metrics | Low | EXISTS | Uses `keep_alive=0` API call |
-| Warmup runs | First inference includes model loading overhead, skewing results; every serious benchmark tool discards warmup | Med | NEEDED | llama-throughput-lab does 2 warmup requests before measurement. Standard practice in all benchmarking. Without this, first-run metrics are inflated by model load + KV cache allocation time |
-| Retry with backoff | Ollama returns 5xx during model loading or under memory pressure; without retry, entire benchmark run fails partway through | Med | NEEDED | External repo retries on HTTP 500/502/503/504 and "Loading model" errors with linear backoff (`base_sleep_s * (attempt + 1)`). 8 retry attempts by default. Critical for reliability on machines with limited resources |
-| Results directory structure | Result files cluttering project root is messy; students lose track of which file is which | Low | NEEDED | External repo uses `results/{subdir}/{prefix}_{timestamp}.csv` pattern. Simple `results/` directory with timestamped files |
-| Cross-platform stability | Students use Windows+WSL, macOS, Linux; crashes on any platform = tool is broken | Med | NEEDED | SIGALRM already fixed to threading, sudo removed. Remaining: path separators, subprocess behavior differences |
-| Pre-flight checks | Running a 30-minute benchmark only to fail because Ollama is not running is unacceptable | Low | NEEDED | Check Ollama is serving, sufficient RAM for target models, warn about GPU/VRAM limitations |
-| Code consolidation (single entry point) | Two benchmark files (`benchmark.py` + `extended_benchmark.py`) confuse students about which to use | Med | NEEDED | Merge into single `benchmark.py` with the extended features |
+| Feature | Why Expected | Complexity | Depends On | Notes |
+|---------|--------------|------------|------------|-------|
+| `--backend` CLI flag | Users need to select which runtime to benchmark. Without it, multi-backend is unusable | Low | Backend protocol | `--backend ollama` (default), `--backend llama-cpp`, `--backend lm-studio`. Default to `ollama` for backward compat |
+| Backend abstraction protocol | All existing runner code is hardcoded to `ollama` Python SDK. Need a common interface so runner.py works with any backend | Med | None (foundation) | Python Protocol class with methods: `chat()`, `list_models()`, `load_model()`, `unload_model()`, `health_check()`, `get_system_info()`. Each backend implements this |
+| Ollama backend (wrap existing) | Existing code must still work unchanged as the default backend | Med | Backend protocol | Wrap current `ollama.chat()`, `ollama.list()`, `ollama.generate(keep_alive=0)` into the protocol. Minimal behavioral change |
+| llama.cpp backend via `/completion` | llama.cpp is 1.5-2x faster than Ollama on Apple Silicon. Students want to see this for themselves | High | Backend protocol | Native `/completion` endpoint (NOT OpenAI-compat -- that strips timings). Response includes `timings.predicted_per_second`, `timings.prompt_per_second`, `timings.predicted_n`, `timings.prompt_n`, `timings.predicted_ms`, `timings.prompt_ms` |
+| LM Studio backend via `/api/v1/chat` | LM Studio has a large student userbase (GUI app, easy model management). Natural companion backend | High | Backend protocol | Native `/api/v1/chat` endpoint returns `stats.tokens_per_second`. Model management: `GET /api/v1/models`, `POST /api/v1/models/load`, `POST /api/v1/models/unload` |
+| Normalized timing metrics | Each backend reports metrics differently. Users need comparable numbers | Med | All backends | Normalize to common fields: `prompt_eval_tokens`, `prompt_eval_seconds`, `response_tokens`, `response_seconds`, `tokens_per_second`. Backend-specific raw data preserved in response |
+| Auto-detect running backends | Students should not need to know which port each backend runs on. The tool should find what is running | Med | Backend protocol | Ollama: `http://localhost:11434/api/tags`. llama.cpp: `http://localhost:8080/health`. LM Studio: `http://localhost:1234/api/v1/models`. Check each, report what is available |
+| Backend-aware preflight checks | Current preflight assumes Ollama. Must work for any backend | Med | Backend protocol, auto-detect | Check connectivity to selected backend. List available models. RAM warnings still apply. Show backend-specific install instructions on failure |
+| Backend label in exports | Results must clearly show which backend was used. Otherwise comparison data is meaningless | Low | Backend protocol | Add `backend` field to JSON/CSV/Markdown exports. Include in `SystemInfo` model |
+| Setup documentation per backend | Students need to know how to install and start llama.cpp server and LM Studio. Ollama docs already exist | Low | None | Concise "Getting started with llama.cpp" and "Getting started with LM Studio" in docs or `--help` output. Not code -- just instructions |
 
 ## Differentiators
 
-Features that set product apart. Not expected in every benchmark tool, but high value for student context.
+Features that make this tool stand out. Not expected in every multi-backend tool but high value for students comparing runtimes.
 
-| Feature | Value Proposition | Complexity | Status | Notes |
-|---------|-------------------|------------|--------|-------|
-| Concurrent benchmark mode | Shows how a model handles parallel requests -- real-world servers don't get one request at a time. Students learn that single-request t/s and multi-request aggregate throughput are very different numbers | High | NEEDED | External repo pattern: `ThreadPoolExecutor(max_workers=concurrency)` submitting N requests, measuring `total_tokens / elapsed_time`. Key parameters: concurrency level, total requests. Ollama supports parallel via its `--parallel` flag internally |
-| Parameter sweep | Auto-explore `num_ctx`, `num_gpu`, `temperature` to find optimal config for student's hardware. Transforms tool from "measure one config" to "find best config" | High | NEEDED | External repo sweeps: instances x parallel x batch x ubatch x concurrency (5-dimensional grid). For Ollama context: sweep `num_ctx` (context window size affects memory/speed), `num_gpu` (GPU layer offloading), temperature. Track best throughput configuration |
-| Interactive CLI menu | Students who are not CLI experts can navigate without memorizing flags | Med | NEEDED | Simple numbered menu: "1. Quick test, 2. Full benchmark, 3. Compare results". No TUI library needed -- just input() prompts |
-| Quick verification mode | 30-second sanity check that confirms setup works before committing to a long benchmark | Low | NEEDED | Run smallest available model with 1 short prompt, report pass/fail |
-| Shareable HTML/Markdown report | Students submit results for course assignments; needs to look professional with system info + rankings | Med | NEEDED | Already have Markdown export. Add ranked summary table at top, system info header. HTML is optional stretch goal |
-| Visual ranked results (terminal) | Seeing a bar chart of model speeds in terminal makes results immediately actionable | Med | NEEDED | Simple ASCII bar chart. No matplotlib dependency. Print after benchmark completes |
-| Results comparison tool | Compare benchmark runs across time or across machines; students want to see if hardware changes improved performance | Med | EXISTS (partial) | `compare_results.py` exists but is basic. Add: sort by metric, filter by model, highlight top-N |
-| Predefined prompt sets (sized) | Students don't know what good benchmark prompts look like; sized sets (small/medium/large) let them pick based on available time | Low | EXISTS | Three sets already defined in `PROMPT_SETS` dict |
+| Feature | Value Proposition | Complexity | Depends On | Notes |
+|---------|-------------------|------------|------------|-------|
+| Cross-backend comparison mode | "Same model, all backends, side-by-side" -- the killer feature. Students see that llama.cpp is 1.5x faster than Ollama on their exact hardware | High | All 3 backends, normalized metrics | Run same model on each detected backend. Produce comparison table with delta percentages. Reuse existing `compare.py` pattern but cross-backend instead of cross-file |
+| Cross-backend comparison report | Visual side-by-side in Markdown/terminal showing Ollama vs llama.cpp vs LM Studio | Med | Cross-backend comparison | Extend existing bar chart and Markdown exporter. Show grouped bars or table with backend columns. Highlight winner per model |
+| Model name mapping | "llama3.2:1b" in Ollama is a GGUF file at a specific path in llama.cpp. Students should not manually figure out GGUF file paths | High | All 3 backends | Map Ollama model names to GGUF file paths. Ollama stores GGUFs in `~/.ollama/models/blobs/`. LM Studio stores in `~/.cache/lm-studio/models/`. Provide `--model-path` override for llama.cpp |
+| `--backend all` shorthand | Benchmark on every running backend in one command. Ultimate convenience | Med | Auto-detect, cross-backend comparison | Detect running backends, benchmark each, produce combined comparison. Simple orchestration of existing per-backend runs |
+| Backend health dashboard | `llm_benchmark info` shows status of all backends: running/stopped, version, loaded models, port | Low | Auto-detect | Extend existing `info` subcommand. Check each backend endpoint, report status. Helpful for debugging "why is my benchmark failing" |
+| Warmup-aware backend switching | When comparing backends, unload from one before loading in another to avoid memory contention | Med | Backend protocol | Ollama: `keep_alive=0`. llama.cpp: managed by server (single model). LM Studio: `POST /api/v1/models/unload`. Sequence: unload from backend A, warmup on backend B, measure |
+| Backend-specific parameter sweep | Sweep `num_ctx` and `num_gpu` on each backend. llama.cpp uses `-c` and `-ngl`, LM Studio uses load parameters | High | Sweep mode, all backends | Map existing sweep dimensions to backend-specific parameters. llama.cpp: `n_predict`, context size via server restart or slot config. LM Studio: context length in load request |
 
 ## Anti-Features
 
-Features to explicitly NOT build. Each represents a complexity trap that would hurt the student experience.
+Features to explicitly NOT build for v2.0. Each represents a complexity trap.
 
 | Anti-Feature | Why Avoid | What to Do Instead |
 |--------------|-----------|-------------------|
-| Direct llama.cpp server management | Ollama already wraps llama.cpp. Managing server binaries, model paths, and build systems is a DevOps nightmare for students. The external repo (`llama-throughput-lab`) requires building llama.cpp from source, locating binaries, and setting 15+ environment variables -- that's expert-level tooling, not student-friendly | Stay on Ollama API exclusively. Ollama handles model downloading, server lifecycle, and GPU allocation |
-| Nginx round-robin load balancing | External repo uses nginx to distribute across multiple llama.cpp instances. Requires nginx installation, dynamic config generation, process management. Adds massive complexity for a niche use case | If concurrent testing is needed, use Ollama's built-in parallel request handling (`OLLAMA_NUM_PARALLEL` env var) |
-| Environment variable configuration | External repo uses 30+ env vars (`LLAMA_PROMPT`, `LLAMA_N_PREDICT`, `LLAMA_INSTANCES_LIST`, etc.) for configuration. Students will not read documentation to discover these | Use argparse CLI flags with clear `--help` output. Config file (YAML/TOML) as optional advanced feature |
-| dialog/curses TUI | Adds ncurses dependency, breaks on Windows, complex to maintain | Simple input() menu with numbered choices works everywhere |
-| Multi-machine distributed testing | Network-based benchmarking adds firewall, latency, authentication complexity | Single-machine focus. Students compare results via exported files |
-| GPU memory profiling (nvidia-smi polling) | Polling nvidia-smi during inference adds timing overhead and is platform-specific | Report GPU info once at start (already done). Students can run nvidia-smi separately if curious |
-| Real-time streaming dashboard | WebSocket server, browser UI, JavaScript -- massive scope increase | Terminal output with periodic progress updates is sufficient |
-| Model quality evaluation (accuracy, perplexity) | Benchmarking throughput and evaluating output quality are fundamentally different tools. Quality eval requires ground truth datasets, scoring rubrics, and domain expertise | Stay focused on performance metrics (t/s, latency). Quality is orthogonal |
+| llama.cpp server lifecycle management | Starting/stopping/building llama.cpp server is OS-specific, requires knowing binary paths, GPU flags. Students should start it separately | Document how to start llama.cpp server. Detect if running. Do NOT attempt to `subprocess.Popen()` the server |
+| LM Studio process management | LM Studio is a GUI app. Launching/controlling it programmatically is fragile and OS-specific | Document "open LM Studio, load a model, enable API". Detect if running |
+| OpenAI-compatible endpoint usage | `/v1/chat/completions` on llama.cpp and LM Studio strips native timing fields. You get `usage.completion_tokens` but NOT `timings.predicted_per_second` or `stats.tokens_per_second` | Always use native endpoints: llama.cpp `/completion`, LM Studio `/api/v1/chat`, Ollama `/api/chat` |
+| Custom llama.cpp compilation | Building llama.cpp with CUDA/Metal/ROCm flags is expert-level. Students use Homebrew (`brew install llama.cpp`) or prebuilt binaries | Document `brew install llama.cpp` for macOS, prebuilt releases for Linux/Windows. Assume server binary exists |
+| GGUF model downloading | Downloading models from HuggingFace requires knowing quantization formats, file sizes, model variants. Ollama and LM Studio handle this via their own UIs | Direct students to use `ollama pull` or LM Studio GUI for model acquisition. For llama.cpp, use models already downloaded by Ollama or LM Studio |
+| Backend-specific concurrent mode | Running concurrent benchmarks across backends simultaneously would require complex cross-process coordination | Keep concurrent mode per-backend. Cross-backend comparison runs sequentially (one backend at a time) |
+| Cloud API backends (OpenAI, Anthropic, etc.) | Adds API key management, rate limiting, cost tracking, network latency variables. Completely different from local inference benchmarking | Stay focused on local inference. Cloud APIs are a different product |
+| Model quality/accuracy comparison across backends | Same GGUF on different backends should produce similar (but not identical) output. Comparing quality is a different tool | Note in docs that outputs may differ slightly. Benchmark throughput only |
 
 ## Feature Dependencies
 
 ```
-Cross-platform stability -----> All other features (foundation)
-Code consolidation -----------> All new features (single codebase to extend)
-Results directory structure --> Export formats (where files go)
-                            --> Results comparison (where to find files)
+Backend protocol -----------------> Ollama backend (wrap existing)
+                                --> llama.cpp backend
+                                --> LM Studio backend
 
-Pre-flight checks ------------> Warmup runs (check before spending time)
-                            --> Parameter sweep (validate before long sweep)
+Ollama backend ------------------> All existing features continue working
+                                   (backward compatibility)
 
-Warmup runs ------------------> Concurrent benchmark (warm before measuring)
-                            --> Parameter sweep (warm before each config)
+All 3 backends ------------------> Auto-detect running backends
+                                --> --backend CLI flag
+                                --> Backend-aware preflight
+                                --> Normalized timing metrics
 
-Retry with backoff -----------> Concurrent benchmark (parallel requests may hit transient errors)
-                            --> Parameter sweep (many configs, some may fail)
+Normalized timing metrics -------> Cross-backend comparison mode
+                                --> Cross-backend comparison report
+                                --> Backend label in exports
 
-Concurrent benchmark ---------> Parameter sweep (concurrency is one sweep dimension)
+Auto-detect running backends ----> --backend all shorthand
+                                --> Backend health dashboard
 
-Quick verification mode ------> Interactive CLI menu (menu option 1)
+Cross-backend comparison mode ---> Cross-backend comparison report
+
+Model name mapping --------------> Cross-backend comparison mode
+                                   (need same model on multiple backends)
 ```
+
+## Backend API Reference (for implementation)
+
+### Ollama (existing, wrap into protocol)
+- **Chat:** `POST /api/chat` -- returns `eval_count`, `eval_duration` (ns), `prompt_eval_count`, `prompt_eval_duration` (ns), `total_duration` (ns), `load_duration` (ns)
+- **List models:** `GET /api/tags` (or `ollama.list()`)
+- **Model info:** `POST /api/show` -- returns model metadata including context length
+- **Unload:** `ollama.generate(model=name, prompt="", keep_alive=0)`
+- **Health:** `GET /api/tags` (200 = running)
+- **Default port:** 11434
+- **Confidence:** HIGH (current codebase uses these directly)
+
+### llama.cpp server
+- **Chat:** `POST /completion` -- returns `timings.predicted_per_second`, `timings.prompt_per_second`, `timings.predicted_n`, `timings.prompt_n`, `timings.predicted_ms`, `timings.prompt_ms`
+- **List models:** `GET /models` (router mode only; single-model mode has no list)
+- **Load/unload:** `POST /models/load`, `POST /models/unload` (router mode only)
+- **Health:** `GET /health` -- returns `{"status": "ok"}` or 503 during loading
+- **Slots:** `GET /slots` -- per-slot processing state and metrics
+- **Default port:** 8080
+- **Key difference:** Single-model server by default. Router mode (launch without `-m`) supports multiple models
+- **Confidence:** HIGH (verified from official README)
+
+### LM Studio
+- **Chat:** `POST /api/v1/chat` -- returns `stats.tokens_per_second` (and speculative decoding stats if enabled)
+- **List models:** `GET /api/v1/models` -- returns model identifiers, capabilities, load status
+- **Load:** `POST /api/v1/models/load` -- accepts GPU offload, context length, flash attention, TTL parameters
+- **Unload:** `POST /api/v1/models/unload` -- requires model identifier
+- **Health:** `GET /api/v1/models` (200 = running)
+- **Default port:** 1234
+- **Key difference:** GUI-first app with API as secondary. Models managed through GUI. API provides programmatic access to loaded models
+- **Confidence:** MEDIUM (from LM Studio docs; `stats` object fields beyond `tokens_per_second` not fully documented. May need to verify exact response schema by hitting the endpoint)
+
+## Timing Metric Normalization Map
+
+| Normalized Field | Ollama | llama.cpp | LM Studio |
+|-----------------|--------|-----------|-----------|
+| `prompt_eval_tokens` | `prompt_eval_count` | `timings.prompt_n` | Need to verify (possibly in `usage` or `stats`) |
+| `prompt_eval_seconds` | `prompt_eval_duration / 1e9` | `timings.prompt_ms / 1000` | Need to verify |
+| `response_tokens` | `eval_count` | `timings.predicted_n` | Need to verify (possibly `usage.completion_tokens`) |
+| `response_seconds` | `eval_duration / 1e9` | `timings.predicted_ms / 1000` | Need to compute from `stats.tokens_per_second` and token count |
+| `response_tokens_per_second` | Computed: `eval_count / (eval_duration/1e9)` | `timings.predicted_per_second` (native) | `stats.tokens_per_second` (native) |
+| `prompt_tokens_per_second` | Computed: `prompt_eval_count / (prompt_eval_duration/1e9)` | `timings.prompt_per_second` (native) | Need to verify |
+| `total_duration_seconds` | `total_duration / 1e9` | Computed: `(prompt_ms + predicted_ms) / 1000` | Need to compute |
+| `load_duration_seconds` | `load_duration / 1e9` | Not in response (separate `/health` status) | Not in response |
+
+**Key observation:** llama.cpp and LM Studio provide t/s natively. Ollama provides raw token counts and nanosecond durations, from which t/s is computed. The normalization layer must handle both directions: raw -> computed and native -> stored.
+
+**Gap flag:** LM Studio's `stats` object is not fully documented. The `tokens_per_second` field is confirmed, but prompt eval metrics and token counts need verification by hitting an actual LM Studio endpoint. This is a LOW confidence area that needs phase-specific research during implementation.
 
 ## MVP Recommendation
 
-Build in this priority order, based on dependencies and impact:
+Build in this priority order based on dependencies and student impact:
 
-**Phase 1 -- Foundation (must happen first):**
-1. Code consolidation (single `benchmark.py`) -- unblocks all subsequent work
-2. Cross-platform stability fixes -- ensures nothing breaks on student machines
-3. Results directory structure -- stop cluttering project root
+**Phase 1 -- Backend Abstraction (foundation):**
+1. Backend protocol (Python Protocol class with type hints)
+2. Ollama backend (wrap existing code, zero behavior change)
+3. Normalized response model (extend `BenchmarkResult` with `backend` field)
+4. `--backend` CLI flag with default `ollama`
+5. Backend label in exports
 
-**Phase 2 -- Reliability:**
-4. Warmup runs -- immediate measurement accuracy improvement, low complexity
-5. Retry with exponential backoff -- prevents partial benchmark failures
-6. Pre-flight hardware check -- fails fast with actionable message
+**Rationale:** After phase 1, existing functionality works identically. All tests pass. The protocol is proven with one real implementation.
 
-**Phase 3 -- Analysis and UX:**
-7. Enhanced results analysis (sort, filter, top-N in comparison tool)
-8. Visual ranked results (terminal bar chart)
-9. Interactive CLI menu
-10. Quick verification mode
+**Phase 2 -- New Backends:**
+6. llama.cpp backend via httpx + `/completion` endpoint
+7. LM Studio backend via httpx + `/api/v1/chat` endpoint
+8. Auto-detect running backends
+9. Backend-aware preflight checks
+10. Setup documentation for each backend
 
-**Phase 4 -- Advanced benchmarking:**
-11. Concurrent benchmark mode -- significantly more complex, needs warmup + retry first
-12. Parameter sweep -- most complex feature, needs concurrent mode as a dimension
+**Rationale:** httpx is the only new dependency. Each backend is an independent implementation of the protocol. Auto-detect ties them together.
 
-**Defer indefinitely:**
-- HTML reports (Markdown is sufficient for course submissions)
-- Shareable report improvements beyond what Markdown provides
+**Phase 3 -- Cross-Backend Comparison:**
+11. Model name mapping (Ollama name -> GGUF path resolution)
+12. Cross-backend comparison mode (`--compare-backends` or `--backend all`)
+13. Cross-backend comparison report (terminal + Markdown)
+14. Backend health dashboard in `info` subcommand
 
-## Patterns Extracted from External Repo
+**Rationale:** This is the "wow" feature but requires both backends working reliably first. Model name mapping is the hardest sub-problem (Ollama blob storage is not user-friendly).
 
-Key implementation patterns from `llama-throughput-lab` that inform how features should work:
-
-**Warmup pattern:** Send N throwaway requests (default: 2) with minimal token count (`n_predict=8`) before measurement begins. Purpose is to ensure model is loaded and KV cache is allocated.
-
-**Retry pattern:** Linear backoff `sleep(base_sleep * (attempt + 1))` with 8 max attempts. Retry on HTTP 500/502/503/504 and "Loading model" string in error response. Non-retryable errors re-raise immediately.
-
-**Concurrent pattern:** `ThreadPoolExecutor(max_workers=concurrency)` submitting `total_requests` futures. Measure wall-clock elapsed time and total tokens across all responses. Report aggregate throughput as `total_tokens / elapsed_time`. Track errors separately without failing the batch.
-
-**Sweep pattern:** Nested loops over parameter dimensions. CSV output with one row per configuration. Track best configuration seen so far. `continue_on_error` flag to skip failed configurations rather than aborting entire sweep. Progress reporting to stderr.
-
-**Results pattern:** Timestamped files in structured subdirectories. CSV for machine-readable sweep results. Print to stdout for immediate feedback, write to file for persistence.
+**Defer to later:**
+- Backend-specific parameter sweep (high complexity, niche use case)
+- `--backend all` shorthand (nice-to-have, Phase 3 comparison mode covers the need)
+- Warmup-aware backend switching (optimization, not correctness)
 
 ## Sources
 
-- Current codebase: `/Users/viktor/Documents/GitHub/vedmich/llm-benchmark/` (benchmark.py, extended_benchmark.py, compare_results.py)
-- External reference: `/Users/viktor/Documents/GitHub/llama-throughput-lab/` (full_sweep.py, test_llama_server_concurrent.py, test_llama_server_threads_sweep.py, llama_server_test_utils.py)
-- Project requirements: `.planning/PROJECT.md`
-- Architecture analysis: `.planning/codebase/ARCHITECTURE.md`
-- Confidence: HIGH -- based on direct code analysis of both repos, not web sources
+- Current codebase: `/Users/viktor/Documents/GitHub/vedmich/llm-benchmark/` (runner.py, models.py, cli.py, exporters.py, compare.py)
+- Project context: `.planning/PROJECT.md` (v2.0 milestone definition)
+- llama.cpp server API: `https://github.com/ggml-org/llama.cpp/tools/server/README.md` -- Confidence: HIGH
+- LM Studio REST API: `https://lmstudio.ai/docs/api` and `/docs/developer/rest` -- Confidence: MEDIUM (stats object partially documented)
+- Ollama API: Current codebase uses `ollama` Python SDK -- Confidence: HIGH
+- GPU benchmark patterns: `https://github.com/XiongjieDai/GPU-Benchmarks-on-LLM-Inference` -- Confidence: HIGH (real benchmark tool using llama.cpp)
+- Prior v1.0 research: `.planning/research/` (previous FEATURES.md)
