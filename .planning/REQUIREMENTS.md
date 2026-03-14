@@ -89,8 +89,8 @@
 
 ### Documentation (DOC)
 
-- [ ] **DOC-01**: README updated with multi-backend quick start and per-OS setup guides for all 3 backends
-- [ ] **DOC-02**: Backend comparison example in README showing real cross-backend output
+- [x] **DOC-01**: README updated with multi-backend quick start and per-OS setup guides for all 3 backends
+- [x] **DOC-02**: Backend comparison example in README showing real cross-backend output
 
 ## v3 Requirements (Future)
 
@@ -174,8 +174,8 @@
 | COMP-03 | Phase 7 | Complete |
 | COMP-04 | Phase 7 | Complete |
 | COMP-05 | Phase 7 | Pending |
-| DOC-01 | Phase 7 | Pending |
-| DOC-02 | Phase 7 | Pending |
+| DOC-01 | Phase 7 | Complete |
+| DOC-02 | Phase 7 | Complete |
 
 **Coverage:**
 - v1 requirements: 27 mapped, 27 complete
