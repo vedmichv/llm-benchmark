@@ -229,6 +229,8 @@ def format_system_summary(backend: Backend | None = None) -> str:
     Uses rich markup for styled output. Example:
         "Apple M2 Pro | 16.0 GB RAM | Apple M2 Pro (integrated GPU) | Ollama 0.6.1"
 
+    Includes a backends section showing all detected backends with status.
+
     Args:
         backend: Optional Backend instance for version info.
 
@@ -248,4 +250,86 @@ def format_system_summary(backend: Backend | None = None) -> str:
 
     parts.append(f"{info.backend_name.title()} {info.backend_version}")
 
-    return " | ".join(parts)
+    summary_line = " | ".join(parts)
+
+    # Append backend inventory
+    try:
+        from llm_benchmark.backends.detection import detect_backends
+
+        statuses = detect_backends()
+        backend_lines = []
+        for bs in statuses:
+            if bs.running:
+                backend_lines.append(
+                    f"  [green]{bs.name} (running, port {bs.port})[/green]"
+                )
+            elif bs.installed:
+                backend_lines.append(
+                    f"  [yellow]{bs.name} (installed, not running)[/yellow]"
+                )
+            else:
+                backend_lines.append(
+                    f"  [dim]{bs.name} (not installed)[/dim]"
+                )
+
+        if backend_lines:
+            active_label = (
+                f"\n[bold]Active backend:[/bold] "
+                f"{info.backend_name} {info.backend_version}"
+            )
+            backends_section = "\n[bold]Backends:[/bold]\n" + "\n".join(backend_lines)
+            summary_line = summary_line + active_label + backends_section
+    except Exception:
+        pass  # Detection failure should not break system summary
+
+    return summary_line
+
+
+def get_backend_inventory() -> str:
+    """Return a rich-formatted string showing all backends with detailed status.
+
+    Shows name, installed status, running status, port, and platform-specific
+    install instructions for missing backends.
+
+    Returns:
+        Rich-formatted multi-line string with backend inventory.
+    """
+    try:
+        from llm_benchmark.backends.detection import (
+            detect_backends,
+            get_install_instructions,
+        )
+    except ImportError:
+        return "[dim]Backend detection not available[/dim]"
+
+    statuses = detect_backends()
+    lines: list[str] = []
+    lines.append("[bold]Backend Inventory[/bold]")
+    lines.append("")
+
+    for bs in statuses:
+        if bs.running:
+            lines.append(
+                f"  [green]{bs.name}[/green]  "
+                f"installed={bs.installed}  running={bs.running}  "
+                f"port={bs.port}"
+            )
+            if bs.binary_path:
+                lines.append(f"    binary: {bs.binary_path}")
+        elif bs.installed:
+            lines.append(
+                f"  [yellow]{bs.name}[/yellow]  "
+                f"installed={bs.installed}  running={bs.running}  "
+                f"port={bs.port}"
+            )
+            if bs.binary_path:
+                lines.append(f"    binary: {bs.binary_path}")
+        else:
+            lines.append(
+                f"  [dim]{bs.name}[/dim]  "
+                f"installed=False  running=False"
+            )
+            instructions = get_install_instructions(bs.name)
+            lines.append(f"    install: {instructions}")
+
+    return "\n".join(lines)

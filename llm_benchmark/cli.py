@@ -448,7 +448,7 @@ def _handle_compare(args: argparse.Namespace) -> int:
 def _handle_info(args: argparse.Namespace) -> int:
     """Handle the 'info' subcommand."""
     from llm_benchmark.backends import create_backend
-    from llm_benchmark.system import get_system_info
+    from llm_benchmark.system import get_backend_inventory, get_system_info
 
     console = get_console()
     backend_name = getattr(args, "backend", "ollama")
@@ -464,6 +464,8 @@ def _handle_info(args: argparse.Namespace) -> int:
     console.print(f"  [bold]OS:[/bold]      {info.os_name}")
     console.print(f"  [bold]Python:[/bold]  {info.python_version}")
     console.print(f"  [bold]{info.backend_name.title()}:[/bold]  {info.backend_version}")
+    console.print()
+    console.print(get_backend_inventory())
 
     return 0
 
