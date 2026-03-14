@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+import argparse
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -259,6 +261,101 @@ class TestBackendFlag:
         parser = _build_parser()
         args = parser.parse_args(["info"])
         assert args.backend == "ollama"
+
+
+class TestBackendAll:
+    """Tests for --backend all (cross-backend comparison mode)."""
+
+    def test_backend_all_accepted_by_parser(self):
+        """--backend all is accepted without error."""
+        from llm_benchmark.cli import _build_parser
+
+        parser = _build_parser()
+        args = parser.parse_args(["run", "--backend", "all"])
+        assert args.backend == "all"
+
+    def test_backend_all_triggers_comparison_branch(self):
+        """--backend all calls run_comparison instead of standard benchmark."""
+        from llm_benchmark.cli import _handle_run
+
+        args = argparse.Namespace(
+            command="run",
+            backend="all",
+            prompt_set="medium",
+            runs_per_prompt=2,
+            timeout=200,
+            skip_warmup=False,
+            max_retries=3,
+            verbose=False,
+            skip_models=[],
+            skip_checks=False,
+        )
+
+        mock_status = MagicMock()
+        mock_status.running = True
+        mock_status.name = "ollama"
+
+        mock_comparison = MagicMock()
+        mock_comparison.backends = ["ollama"]
+
+        mock_system_info = MagicMock()
+
+        with (
+            patch(
+                "llm_benchmark.cli.detect_backends",
+                return_value=[mock_status],
+            ) as mock_detect,
+            patch(
+                "llm_benchmark.cli.run_comparison",
+                return_value=mock_comparison,
+            ) as mock_run_comp,
+            patch(
+                "llm_benchmark.cli.export_comparison_json",
+                return_value=Path("results/comparison.json"),
+            ),
+            patch(
+                "llm_benchmark.cli.export_comparison_markdown",
+                return_value=Path("results/comparison.md"),
+            ),
+            patch("llm_benchmark.cli.get_system_info", return_value=mock_system_info),
+            patch("llm_benchmark.cli.get_console"),
+        ):
+            result = _handle_run(args)
+
+        assert result == 0
+        mock_detect.assert_called_once()
+        mock_run_comp.assert_called_once()
+
+    def test_backend_all_no_running_backends_returns_error(self):
+        """--backend all with 0 running backends returns exit code 1."""
+        from llm_benchmark.cli import _handle_run
+
+        args = argparse.Namespace(
+            command="run",
+            backend="all",
+            prompt_set="medium",
+            runs_per_prompt=2,
+            timeout=200,
+            skip_warmup=False,
+            max_retries=3,
+            verbose=False,
+            skip_models=[],
+            skip_checks=False,
+        )
+
+        mock_status = MagicMock()
+        mock_status.running = False
+
+        with (
+            patch(
+                "llm_benchmark.cli.detect_backends",
+                return_value=[mock_status],
+            ),
+            patch("llm_benchmark.cli.get_console"),
+        ):
+            result = _handle_run(args)
+
+        assert result == 1
 
 
 class TestCreateBackendFactory:
