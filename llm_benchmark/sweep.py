@@ -20,10 +20,14 @@ from llm_benchmark.config import (
 from llm_benchmark.models import (
     SweepConfigResult,
     SweepModelResult,
-    _ns_to_sec,
 )
 from llm_benchmark.runner import unload_model, warmup_model
 from llm_benchmark.system import _get_gpu_info
+
+
+def _ns_to_sec(ns: int) -> float:
+    """Convert nanoseconds to seconds (for raw ollama responses)."""
+    return ns / 1_000_000_000
 
 
 def get_model_layers(model_name: str) -> int | None:
@@ -205,6 +209,9 @@ def run_sweep_for_model(
     Tests all combinations of num_ctx and num_gpu, collects results,
     identifies the best configuration, and displays a summary table.
 
+    Note: sweep still uses ollama SDK directly. warmup/unload now need
+    a backend instance, so we create one temporarily.
+
     Args:
         model_name: Ollama model name (e.g. "llama3:8b").
         timeout: Timeout in seconds per config.
@@ -214,6 +221,10 @@ def run_sweep_for_model(
         SweepModelResult with all config results and best config.
     """
     console = get_console()
+
+    # Create backend for warmup/unload
+    from llm_benchmark.backends import create_backend
+    backend = create_backend()
 
     # Detect GPU
     gpu_name, _ = _get_gpu_info()
@@ -233,7 +244,7 @@ def run_sweep_for_model(
 
     # Warmup once
     if not skip_warmup:
-        warmup_model(model_name, timeout)
+        warmup_model(backend, model_name, timeout)
 
     # Run each config
     results: list[SweepConfigResult] = []
@@ -254,7 +265,7 @@ def run_sweep_for_model(
             console.print(f"    [red]Failed: {result.error}[/red]")
 
         # Unload between configs to force clean reload with new options
-        unload_model(model_name)
+        unload_model(backend, model_name)
 
     # Pick best
     successful = [c for c in results if c.success]

@@ -18,6 +18,7 @@ import time
 
 import ollama
 
+from llm_benchmark.backends import BackendResponse
 from llm_benchmark.config import (
     DEFAULT_CONCURRENT,
     DEFAULT_TIMEOUT,
@@ -26,10 +27,13 @@ from llm_benchmark.config import (
 from llm_benchmark.models import (
     BenchmarkResult,
     ConcurrentBatchResult,
-    OllamaResponse,
-    _ns_to_sec,
 )
 from llm_benchmark.runner import warmup_model
+
+
+def _ns_to_sec(ns: int) -> float:
+    """Convert nanoseconds to seconds (for raw ollama async responses)."""
+    return ns / 1_000_000_000
 
 
 def auto_detect_concurrency(
@@ -70,17 +74,36 @@ async def _single_request(
             messages=[{"role": "user", "content": prompt}],
         )
 
-        # Convert SDK response to dict for Pydantic validation
+        # Convert SDK response to dict
         if hasattr(raw_response, "model_dump"):
             raw_response = raw_response.model_dump()
         elif hasattr(raw_response, "dict"):
             raw_response = raw_response.dict()
 
-        response = OllamaResponse.model_validate(raw_response)
+        # Build BackendResponse from raw Ollama data (nanoseconds -> seconds)
+        msg = raw_response.get("message", {})
+        content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+
+        prompt_eval_count = raw_response.get("prompt_eval_count", 0)
+        prompt_cached = prompt_eval_count == -1
+        if prompt_cached:
+            prompt_eval_count = 0
+
+        response = BackendResponse(
+            model=raw_response.get("model", model),
+            content=content,
+            done=raw_response.get("done", True),
+            prompt_eval_count=prompt_eval_count,
+            eval_count=raw_response.get("eval_count", 0),
+            total_duration=_ns_to_sec(raw_response.get("total_duration", 0)),
+            load_duration=_ns_to_sec(raw_response.get("load_duration", 0)),
+            prompt_eval_duration=_ns_to_sec(raw_response.get("prompt_eval_duration", 0)),
+            eval_duration=_ns_to_sec(raw_response.get("eval_duration", 0)),
+            prompt_cached=prompt_cached,
+        )
 
         # Compute per-request throughput
-        eval_dur_s = _ns_to_sec(response.eval_duration)
-        rate = response.eval_count / eval_dur_s if eval_dur_s > 0 else 0
+        rate = response.eval_count / response.eval_duration if response.eval_duration > 0 else 0
 
         console.print(
             f"    Request {request_id + 1}/{num_workers}: "
@@ -142,9 +165,8 @@ async def _run_batch(
     # Average per-request throughput: mean of individual rates
     per_request_rates = []
     for r in successful:
-        eval_dur_s = _ns_to_sec(r.response.eval_duration)
-        if eval_dur_s > 0:
-            per_request_rates.append(r.response.eval_count / eval_dur_s)
+        if r.response.eval_duration > 0:
+            per_request_rates.append(r.response.eval_count / r.response.eval_duration)
 
     avg_request_throughput_ts = (
         statistics.mean(per_request_rates) if per_request_rates else 0.0
@@ -195,6 +217,9 @@ def benchmark_model_concurrent(
     Warms up the model once, then for each prompt (x runs_per_prompt),
     fires a concurrent batch of num_workers parallel requests.
 
+    Note: warmup_model now requires a backend parameter. For concurrent mode,
+    we create a temporary backend for warmup only.
+
     Args:
         model_name: Ollama model name.
         prompts: List of prompt strings.
@@ -212,7 +237,9 @@ def benchmark_model_concurrent(
 
     # Warmup once
     if not skip_warmup:
-        warmup_model(model_name, timeout)
+        from llm_benchmark.backends import create_backend
+        backend = create_backend()
+        warmup_model(backend, model_name, timeout)
     else:
         console.print(
             "  [dim]Warmup skipped -- first run may include model load time[/dim]"

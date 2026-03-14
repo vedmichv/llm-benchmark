@@ -165,6 +165,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _handle_run(args: argparse.Namespace) -> int:
     """Handle the 'run' subcommand."""
+    from llm_benchmark.backends import create_backend
     from llm_benchmark.exporters import export_csv, export_json, export_markdown
     from llm_benchmark.preflight import run_preflight_checks
     from llm_benchmark.prompts import get_prompts
@@ -172,18 +173,20 @@ def _handle_run(args: argparse.Namespace) -> int:
     from llm_benchmark.system import format_system_summary, get_system_info
 
     console = get_console()
+    backend = create_backend()
 
     # Pre-flight checks
     models = run_preflight_checks(
+        backend=backend,
         skip_models=args.skip_models,
         skip_checks=args.skip_checks,
     )
 
     # System summary
-    console.print(format_system_summary())
+    console.print(format_system_summary(backend=backend))
     console.print()
 
-    system_info = get_system_info()
+    system_info = get_system_info(backend=backend)
 
     # --- Sweep mode ---
     if args.sweep:
@@ -202,7 +205,7 @@ def _handle_run(args: argparse.Namespace) -> int:
 
         sweep_results = []
         for idx, model in enumerate(models):
-            model_name = model.model
+            model_name = model['model']
             console.rule(
                 f"[bold]{model_name}[/bold] ({idx + 1}/{len(models)})"
             )
@@ -275,7 +278,7 @@ def _handle_run(args: argparse.Namespace) -> int:
 
         all_batch_results = []
         for idx, model in enumerate(models):
-            model_name = model.model
+            model_name = model['model']
             console.rule(
                 f"[bold]{model_name}[/bold] ({idx + 1}/{len(models)})"
             )
@@ -291,7 +294,7 @@ def _handle_run(args: argparse.Namespace) -> int:
             all_batch_results.append(batches)
 
             # Unload after each model
-            unload_model(model_name)
+            unload_model(backend, model_name)
             console.print()
 
         # Bar chart for concurrent mode
@@ -339,11 +342,12 @@ def _handle_run(args: argparse.Namespace) -> int:
 
     try:
         for idx, model in enumerate(models):
-            model_name = model.model
+            model_name = model['model']
             console.rule(f"[bold]{model_name}[/bold] ({idx + 1}/{len(models)})")
 
             try:
                 summary = benchmark_model(
+                    backend=backend,
                     model_name=model_name,
                     prompts=prompts,
                     verbose=args.verbose,
@@ -371,7 +375,7 @@ def _handle_run(args: argparse.Namespace) -> int:
                         break
 
             # Unload model after benchmarking
-            unload_model(model_name)
+            unload_model(backend, model_name)
             console.print()
     except KeyboardInterrupt:
         console.print(
@@ -426,7 +430,7 @@ def _handle_info(_args: argparse.Namespace) -> int:
         console.print(f"  [bold]VRAM:[/bold]    {info.gpu_vram_gb:.1f} GB")
     console.print(f"  [bold]OS:[/bold]      {info.os_name}")
     console.print(f"  [bold]Python:[/bold]  {info.python_version}")
-    console.print(f"  [bold]Ollama:[/bold]  {info.ollama_version}")
+    console.print(f"  [bold]{info.backend_name.title()}:[/bold]  {info.backend_version}")
 
     return 0
 

@@ -13,9 +13,6 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-import ollama
-from ollama import RequestError as _RequestError
-from ollama import ResponseError as _ResponseError
 from tenacity import (
     retry,
     retry_if_exception,
@@ -23,6 +20,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from llm_benchmark.backends import Backend, BackendError, BackendResponse, StreamResult
 from llm_benchmark.config import (
     DEFAULT_MAX_RETRIES,
     DEFAULT_TIMEOUT,
@@ -32,8 +30,6 @@ from llm_benchmark.config import (
 from llm_benchmark.models import (
     BenchmarkResult,
     ModelSummary,
-    OllamaResponse,
-    _ns_to_sec,
 )
 
 
@@ -82,14 +78,15 @@ def run_with_timeout(
     return result[0]
 
 
-def warmup_model(model_name: str, timeout: int = DEFAULT_TIMEOUT) -> bool:
+def warmup_model(backend: Backend, model_name: str, timeout: int = DEFAULT_TIMEOUT) -> bool:
     """Send a short prompt to pre-load the model into memory.
 
     This ensures the first real benchmark run does not include model
     loading overhead in its timing measurements.
 
     Args:
-        model_name: Ollama model name (e.g. "llama3.2:1b").
+        backend: Backend instance to use.
+        model_name: Model name (e.g. "llama3.2:1b").
         timeout: Timeout in seconds for the warmup call.
 
     Returns:
@@ -98,14 +95,17 @@ def warmup_model(model_name: str, timeout: int = DEFAULT_TIMEOUT) -> bool:
     console = get_console()
     console.print(f"  Warming up {model_name}...", end="")
     try:
-        run_with_timeout(
-            ollama.chat,
+        success = run_with_timeout(
+            backend.warmup,
             timeout,
-            model=model_name,
-            messages=[{"role": "user", "content": DEFAULT_WARMUP_PROMPT}],
+            model_name,
+            timeout,
         )
-        console.print(" Ready")
-        return True
+        if success:
+            console.print(" Ready")
+        else:
+            console.print(" [yellow]Warmup failed[/yellow]")
+        return success
     except Exception as exc:
         console.print(f" [yellow]Warmup failed: {exc}[/yellow]")
         return False
@@ -114,36 +114,27 @@ def warmup_model(model_name: str, timeout: int = DEFAULT_TIMEOUT) -> bool:
 def _is_retryable(exc: BaseException) -> bool:
     """Return True if the exception is transient and should be retried.
 
-    Retryable: ConnectionError, ollama.RequestError,
-    and ollama.ResponseError with status_code >= 500.
+    Retryable: BackendError with retryable=True.
 
     Non-retryable: TimeoutError (retrying a 200s timeout wastes minutes),
-    ollama.ResponseError with status_code < 500 (e.g. 404).
+    BackendError with retryable=False (e.g. 404).
     """
     if isinstance(exc, TimeoutError):
         return False
-    if isinstance(exc, ConnectionError):
-        return True
-    if isinstance(exc, _RequestError):
-        return True
-    if isinstance(exc, _ResponseError):
-        return getattr(exc, "status_code", 0) >= 500
+    if isinstance(exc, BackendError):
+        return exc.retryable
     return False
 
 
-def _get_model_size_gb(model_name: str) -> float | None:
-    """Get on-disk model size in GB from ollama.list()."""
+def _get_model_size_gb(backend: Backend, model_name: str) -> float | None:
+    """Get on-disk model size in GB from the backend."""
     try:
-        response = ollama.list()
-        for m in response.models:
-            if m.model == model_name:
-                return m.size / (1024**3)
+        return backend.get_model_size(model_name)
     except Exception:
-        pass
-    return None
+        return None
 
 
-def detect_num_ctx(model_name: str) -> int:
+def detect_num_ctx(backend: Backend, model_name: str) -> int:
     """Auto-detect a reasonable num_ctx for a model.
 
     Scales context window based on model size to avoid OOM on small models.
@@ -155,18 +146,11 @@ def detect_num_ctx(model_name: str) -> int:
     """
     console = get_console()
     try:
-        info = ollama.show(model_name)
-        model_dump = info.model_dump() if hasattr(info, "model_dump") else vars(info)
-        model_info = model_dump.get("modelinfo", model_dump.get("model_info", {}))
+        max_ctx = backend.detect_context_window(model_name)
 
-        max_ctx = None
-        for key, val in model_info.items():
-            if "context_length" in key:
-                max_ctx = int(val)
-                break
-
-        if max_ctx is None:
-            return 4096
+        if max_ctx == 4096:
+            # Default fallback from backend -- may be real or unknown
+            pass
 
         # Check if thinking model (qwen3.5, deepseek-r1, etc.)
         is_thinking = any(
@@ -175,7 +159,7 @@ def detect_num_ctx(model_name: str) -> int:
         )
 
         # Scale num_ctx by model size to avoid OOM on small models
-        size_gb = _get_model_size_gb(model_name)
+        size_gb = _get_model_size_gb(backend, model_name)
 
         if size_gb is not None:
             if size_gb < 3:
@@ -204,21 +188,21 @@ def detect_num_ctx(model_name: str) -> int:
         return 4096
 
 
-def unload_model(model_name: str) -> bool:
-    """Unload a model from GPU memory via Ollama API.
+def unload_model(backend: Backend, model_name: str) -> bool:
+    """Unload a model from GPU memory via Backend API.
 
-    Uses keep_alive=0 to tell Ollama to immediately release the model
+    Uses the backend's unload mechanism to release the model
     from memory. No sudo required (STAB-05).
 
     Args:
+        backend: Backend instance to use.
         model_name: Name of the model to unload (e.g. "llama3.2:1b").
 
     Returns:
         True if successful, False if an error occurred.
     """
     try:
-        ollama.generate(model=model_name, prompt="", keep_alive=0)
-        return True
+        return backend.unload_model(model_name)
     except Exception:
         return False
 
@@ -246,7 +230,7 @@ def compute_averages(results: list[BenchmarkResult]) -> dict:
     # Response tokens/time: include all successful runs
     total_response_tokens = sum(r.response.eval_count for r in successful)
     total_response_time = sum(
-        _ns_to_sec(r.response.eval_duration) for r in successful
+        r.response.eval_duration for r in successful
     )
 
     # Prompt eval: exclude cached results (STAB-04 extension)
@@ -255,7 +239,7 @@ def compute_averages(results: list[BenchmarkResult]) -> dict:
         r.response.prompt_eval_count for r in non_cached
     )
     total_prompt_time = sum(
-        _ns_to_sec(r.response.prompt_eval_duration) for r in non_cached
+        r.response.prompt_eval_duration for r in non_cached
     )
 
     # Total: use non-cached for prompt + all for response
@@ -278,6 +262,7 @@ def compute_averages(results: list[BenchmarkResult]) -> dict:
 
 
 def run_single_benchmark(
+    backend: Backend,
     model_name: str,
     prompt: str,
     verbose: bool = False,
@@ -287,16 +272,17 @@ def run_single_benchmark(
 ) -> BenchmarkResult:
     """Execute a single benchmark: one prompt against one model.
 
-    Supports automatic retry of transient errors (ConnectionError,
-    TimeoutError, 5xx) with exponential backoff via tenacity.
+    Supports automatic retry of transient errors with exponential
+    backoff via tenacity.
 
     Args:
-        model_name: Ollama model name (e.g. "llama3.2:1b").
+        backend: Backend instance to use.
+        model_name: Model name (e.g. "llama3.2:1b").
         prompt: The prompt text to send.
         verbose: If True, stream and display response chunks.
         timeout: Timeout in seconds for the benchmark run.
         max_retries: Maximum retry attempts (0 to disable retries).
-        num_ctx: Context window size (None = Ollama default, typically 2048).
+        num_ctx: Context window size (None = backend default).
 
     Returns:
         BenchmarkResult with success=True on success, or
@@ -304,67 +290,39 @@ def run_single_benchmark(
     """
     console = get_console()
     options = {"num_ctx": num_ctx} if num_ctx else {}
+    messages = [{"role": "user", "content": prompt}]
 
-    def _run_benchmark() -> dict:
+    def _run_benchmark() -> BackendResponse:
         """Inner function executed within timeout wrapper."""
         if verbose:
             # Streaming mode: print response chunks
-            stream = ollama.chat(
-                model=model_name,
-                messages=[{"role": "user", "content": prompt}],
+            result = backend.chat(
+                model_name,
+                messages,
                 stream=True,
                 options=options,
             )
-            last_chunk = None
             char_count = 0
-            for chunk in stream:
-                content = chunk.get("message", {}).get("content", "")
+            for chunk in result.chunks:
                 if char_count < 200:
-                    console.print(content, end="", highlight=False)
-                    char_count += len(content)
+                    console.print(chunk, end="", highlight=False)
+                    char_count += len(chunk)
                     if char_count >= 200:
                         console.print("...", end="", highlight=False)
-                last_chunk = chunk
             console.print()  # newline after streaming
-            return last_chunk
+            return result.response
         else:
             # Non-streaming mode
-            response = ollama.chat(
-                model=model_name,
-                messages=[{"role": "user", "content": prompt}],
+            response = backend.chat(
+                model_name,
+                messages,
                 options=options,
             )
             return response
 
-    def _run_with_timeout() -> dict:
+    def _run_with_timeout() -> BackendResponse:
         """Wrap _run_benchmark with timeout -- each retry gets full budget."""
         return run_with_timeout(_run_benchmark, timeout)
-
-    def _parse_response(raw_response: dict) -> BenchmarkResult:
-        """Convert raw Ollama response to BenchmarkResult."""
-        if raw_response is None:
-            return BenchmarkResult(
-                model=model_name,
-                prompt=prompt,
-                success=False,
-                error="No response received",
-            )
-
-        # Convert SDK response to dict for Pydantic validation
-        if hasattr(raw_response, "model_dump"):
-            raw_response = raw_response.model_dump()
-        elif hasattr(raw_response, "dict"):
-            raw_response = raw_response.dict()
-
-        response = OllamaResponse.model_validate(raw_response)
-
-        return BenchmarkResult(
-            model=model_name,
-            prompt=prompt,
-            success=True,
-            response=response,
-            prompt_cached=response.prompt_cached,
-        )
 
     try:
         if max_retries > 0:
@@ -382,15 +340,21 @@ def run_single_benchmark(
                 before_sleep=_before_sleep,
                 reraise=True,
             )
-            raw_response = retryer(_run_with_timeout)()
+            response = retryer(_run_with_timeout)()
         else:
-            raw_response = _run_with_timeout()
+            response = _run_with_timeout()
 
-        return _parse_response(raw_response)
+        return BenchmarkResult(
+            model=model_name,
+            prompt=prompt,
+            success=True,
+            response=response,
+            prompt_cached=response.prompt_cached,
+        )
 
     except TimeoutError:
-        # Unload and reload to reset Ollama state after timeout
-        unload_model(model_name)
+        # Unload and reload to reset state after timeout
+        unload_model(backend, model_name)
         return BenchmarkResult(
             model=model_name,
             prompt=prompt,
@@ -407,6 +371,7 @@ def run_single_benchmark(
 
 
 def benchmark_model(
+    backend: Backend,
     model_name: str,
     prompts: list[str],
     verbose: bool = False,
@@ -419,7 +384,8 @@ def benchmark_model(
     """Orchestrate benchmarking a single model across all prompts.
 
     Args:
-        model_name: Ollama model name.
+        backend: Backend instance to use.
+        model_name: Model name.
         prompts: List of prompt strings to benchmark.
         verbose: If True, stream responses.
         timeout: Per-run timeout in seconds.
@@ -436,11 +402,11 @@ def benchmark_model(
 
     # Auto-detect optimal context window if not explicitly set
     if num_ctx is None:
-        num_ctx = detect_num_ctx(model_name)
+        num_ctx = detect_num_ctx(backend, model_name)
 
     # Warmup: pre-load model to exclude load time from measurements
     if not skip_warmup:
-        warmup_model(model_name, timeout)
+        warmup_model(backend, model_name, timeout)
     else:
         console.print(
             "  [dim]Warmup skipped -- first run may include model load time[/dim]"
@@ -457,6 +423,7 @@ def benchmark_model(
                 console.print(f"    Run {run_num + 1}/{runs_per_prompt}")
 
             result = run_single_benchmark(
+                backend=backend,
                 model_name=model_name,
                 prompt=prompt,
                 verbose=verbose,
@@ -469,7 +436,7 @@ def benchmark_model(
             if result.success and result.response:
                 response_ts = (
                     result.response.eval_count
-                    / _ns_to_sec(result.response.eval_duration)
+                    / result.response.eval_duration
                     if result.response.eval_duration > 0
                     else 0
                 )
@@ -490,8 +457,8 @@ def benchmark_model(
                     console.print(
                         "    [dim]Skipping remaining runs — reloading model...[/dim]"
                     )
-                    unload_model(model_name)
-                    warmup_model(model_name, timeout)
+                    unload_model(backend, model_name)
+                    warmup_model(backend, model_name, timeout)
                     break  # skip remaining runs, move to next prompt
 
     # Warn if all successful results are cached

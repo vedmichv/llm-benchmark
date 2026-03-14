@@ -1,21 +1,20 @@
 """Tests for llm_benchmark.exporters module -- cache indicators and output."""
 
 import csv
-from datetime import UTC, datetime
 
+from llm_benchmark.backends import BackendResponse
 from llm_benchmark.models import (
     BenchmarkResult,
     ModelSummary,
-    OllamaResponse,
 )
 
 
 def _make_result(
     prompt_cached: bool = False,
     eval_count: int = 120,
-    eval_duration: int = 4_000_000_000,
+    eval_duration: float = 4.0,
     prompt_eval_count: int = 15,
-    prompt_eval_duration: int = 200_000_000,
+    prompt_eval_duration: float = 0.2,
     success: bool = True,
     error: str | None = None,
 ) -> BenchmarkResult:
@@ -27,13 +26,12 @@ def _make_result(
             success=False,
             error=error or "some error",
         )
-    resp = OllamaResponse(
+    resp = BackendResponse(
         model="test-model",
-        created_at=datetime.now(UTC),
-        message={"role": "assistant", "content": "test response"},
+        content="test response",
         done=True,
         total_duration=prompt_eval_duration + eval_duration,
-        load_duration=0,
+        load_duration=0.0,
         prompt_eval_count=prompt_eval_count,
         prompt_eval_duration=prompt_eval_duration,
         eval_count=eval_count,
@@ -54,7 +52,7 @@ def _make_summary(results: list[BenchmarkResult] | None = None) -> ModelSummary:
     if results is None:
         results = [
             _make_result(prompt_cached=False),
-            _make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0),
+            _make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0.0),
         ]
     return ModelSummary(
         model="test-model",
@@ -84,7 +82,7 @@ class TestCsvCacheColumn:
         """Cached run rows show 'Yes' in Cached column."""
         from llm_benchmark.exporters import export_csv
 
-        cached_result = _make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0)
+        cached_result = _make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0.0)
         summary = _make_summary([cached_result])
         filepath = export_csv([summary], output_dir=tmp_path)
 
@@ -133,7 +131,7 @@ class TestMarkdownCacheIndicator:
         """Markdown detailed results show '[cached]' for cached runs."""
         from llm_benchmark.exporters import export_markdown
 
-        cached_result = _make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0)
+        cached_result = _make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0.0)
         summary = _make_summary([cached_result])
         filepath = export_markdown([summary], output_dir=tmp_path)
 
@@ -226,7 +224,8 @@ class TestMarkdownRankings:
             gpu="Apple M1 (integrated)",
             os_name="macOS 14.0",
             python_version="3.12.0",
-            ollama_version="0.6.1",
+            backend_name="ollama",
+            backend_version="0.6.1",
         )
 
     def test_export_markdown_has_rankings(self, tmp_path):

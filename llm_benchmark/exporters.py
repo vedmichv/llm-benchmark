@@ -12,7 +12,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from llm_benchmark.models import ModelSummary, SystemInfo, _ns_to_sec
+from llm_benchmark.models import ModelSummary, SystemInfo
 
 _RESULTS_GITIGNORE = """\
 # Benchmark result files -- do not commit
@@ -59,16 +59,16 @@ def _result_to_dict(result) -> dict:
         r = result.response
         d["prompt_eval_count"] = r.prompt_eval_count
         d["eval_count"] = r.eval_count
-        d["prompt_eval_duration_s"] = round(_ns_to_sec(r.prompt_eval_duration), 4)
-        d["eval_duration_s"] = round(_ns_to_sec(r.eval_duration), 4)
-        d["total_duration_s"] = round(_ns_to_sec(r.total_duration), 4)
-        d["load_duration_s"] = round(_ns_to_sec(r.load_duration), 4)
+        d["prompt_eval_duration_s"] = round(r.prompt_eval_duration, 4)
+        d["eval_duration_s"] = round(r.eval_duration, 4)
+        d["total_duration_s"] = round(r.total_duration, 4)
+        d["load_duration_s"] = round(r.load_duration, 4)
         # Compute per-run rates
         d["prompt_eval_ts"] = round(
-            r.prompt_eval_count / _ns_to_sec(r.prompt_eval_duration), 2
+            r.prompt_eval_count / r.prompt_eval_duration, 2
         ) if r.prompt_eval_duration > 0 else 0
         d["response_ts"] = round(
-            r.eval_count / _ns_to_sec(r.eval_duration), 2
+            r.eval_count / r.eval_duration, 2
         ) if r.eval_duration > 0 else 0
     return d
 
@@ -146,7 +146,7 @@ def export_csv(
             writer.writerow(["RAM", f"{system_info.ram_gb:.1f} GB"])
             writer.writerow(["GPU", system_info.gpu])
             writer.writerow(["OS", system_info.os_name])
-            writer.writerow(["Ollama", system_info.ollama_version])
+            writer.writerow(["Backend", f"{system_info.backend_name} {system_info.backend_version}"])
             writer.writerow([])
 
         # Column headers
@@ -168,12 +168,12 @@ def export_csv(
                 if run.success and run.response:
                     r = run.response
                     prompt_ts = (
-                        r.prompt_eval_count / _ns_to_sec(r.prompt_eval_duration)
+                        r.prompt_eval_count / r.prompt_eval_duration
                         if r.prompt_eval_duration > 0
                         else 0
                     )
                     response_ts = (
-                        r.eval_count / _ns_to_sec(r.eval_duration)
+                        r.eval_count / r.eval_duration
                         if r.eval_duration > 0
                         else 0
                     )
@@ -186,7 +186,7 @@ def export_csv(
                         r.eval_count,
                         f"{prompt_ts:.2f}",
                         f"{response_ts:.2f}",
-                        f"{_ns_to_sec(r.total_duration):.2f}",
+                        f"{r.total_duration:.2f}",
                         "",
                     ])
                 else:
@@ -288,13 +288,13 @@ def export_markdown(
             if run.success and run.response:
                 r = run.response
                 resp_ts = (
-                    r.eval_count / _ns_to_sec(r.eval_duration)
+                    r.eval_count / r.eval_duration
                     if r.eval_duration > 0
                     else 0
                 )
                 lines.append(
                     f"   - {r.eval_count} tokens @ {resp_ts:.1f} t/s, "
-                    f"{_ns_to_sec(r.total_duration):.2f}s total"
+                    f"{r.total_duration:.2f}s total"
                 )
             else:
                 lines.append(f"   - Error: {run.error}")
@@ -393,7 +393,7 @@ def export_concurrent_csv(
             writer.writerow(["RAM", f"{system_info.ram_gb:.1f} GB"])
             writer.writerow(["GPU", system_info.gpu])
             writer.writerow(["OS", system_info.os_name])
-            writer.writerow(["Ollama", system_info.ollama_version])
+            writer.writerow(["Backend", f"{system_info.backend_name} {system_info.backend_version}"])
             writer.writerow(["Mode", "concurrent"])
             writer.writerow([])
 
@@ -610,7 +610,7 @@ def export_sweep_csv(
             writer.writerow(["RAM", f"{system_info.ram_gb:.1f} GB"])
             writer.writerow(["GPU", system_info.gpu])
             writer.writerow(["OS", system_info.os_name])
-            writer.writerow(["Ollama", system_info.ollama_version])
+            writer.writerow(["Backend", f"{system_info.backend_name} {system_info.backend_version}"])
             writer.writerow(["Mode", "sweep"])
             writer.writerow([])
 

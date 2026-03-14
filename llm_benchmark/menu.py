@@ -84,10 +84,15 @@ def _build_namespace(
 def _mode_quick(models: list) -> argparse.Namespace:
     """Quick test: smallest model, 1 short prompt, 1 run, skip warmup."""
     console = get_console()
-    sorted_models = sorted(models, key=lambda m: m.size)
+    sorted_models = sorted(models, key=lambda m: m['size'] if isinstance(m, dict) else m.size)
     smallest = sorted_models[0]
-    skip = [m.model for m in models if m.model != smallest.model]
-    console.print(f"  Quick test with [bold]{smallest.model}[/bold]")
+    smallest_name = smallest['model'] if isinstance(smallest, dict) else smallest.model
+    skip = [
+        (m['model'] if isinstance(m, dict) else m.model)
+        for m in models
+        if (m['model'] if isinstance(m, dict) else m.model) != smallest_name
+    ]
+    console.print(f"  Quick test with [bold]{smallest_name}[/bold]")
     return _build_namespace(
         prompt_set="small",
         prompts=["Write a one-sentence summary of what a CPU does."],
@@ -139,8 +144,10 @@ def _mode_custom(models: list) -> argparse.Namespace:
     console.print()
     console.print("  Available models:")
     for i, m in enumerate(models, 1):
-        size_gb = m.size / (1024 ** 3)
-        console.print(f"    {i}. {m.model}  ({size_gb:.1f} GB)")
+        m_size = m['size'] if isinstance(m, dict) else m.size
+        m_name = m['model'] if isinstance(m, dict) else m.model
+        size_gb = m_size / (1024 ** 3)
+        console.print(f"    {i}. {m_name}  ({size_gb:.1f} GB)")
 
     skip_models: list[str] = []
     try:
@@ -154,7 +161,8 @@ def _mode_custom(models: list) -> argparse.Namespace:
             try:
                 idx = int(token) - 1
                 if 0 <= idx < len(models):
-                    skip_models.append(models[idx].model)
+                    m = models[idx]
+                    skip_models.append(m['model'] if isinstance(m, dict) else m.model)
             except ValueError:
                 pass
 

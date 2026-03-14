@@ -1,4 +1,4 @@
-"""Pre-flight checks: Ollama connectivity, model availability, RAM warnings.
+"""Pre-flight checks: backend connectivity, model availability, RAM warnings.
 
 Runs automatically before every benchmark. Connectivity and model checks
 are blocking (sys.exit(1) on failure). RAM warnings are advisory only --
@@ -12,8 +12,7 @@ import shutil
 import subprocess
 import sys
 
-import ollama
-
+from llm_benchmark.backends import Backend
 from llm_benchmark.config import RAM_SAFETY_MULTIPLIER, get_console
 
 
@@ -116,53 +115,58 @@ def check_ollama_installed() -> bool:
     return False
 
 
-def check_ollama_connectivity() -> bool:
-    """Check if the Ollama server is reachable.
+def check_backend_connectivity(backend: Backend) -> bool:
+    """Check if the backend server is reachable.
 
-    Returns True if ollama.list() succeeds. On failure, prints
-    platform-specific instructions for starting Ollama.
+    Returns True if backend.check_connectivity() succeeds. On failure, prints
+    platform-specific instructions for starting the backend.
+
+    Args:
+        backend: Backend instance to check connectivity for.
 
     Returns:
-        True if Ollama is reachable, False otherwise.
+        True if backend is reachable, False otherwise.
     """
     console = get_console()
     try:
-        ollama.list()
-        return True
+        if backend.check_connectivity():
+            return True
     except Exception:
-        os_name = platform.system()
-        console.print("[red bold]Cannot connect to Ollama[/red bold]")
-        console.print()
-        if os_name == "Darwin":
-            console.print("  Start Ollama from your Applications folder, or run:")
-            console.print("  [cyan]ollama serve[/cyan]")
-        elif os_name == "Windows":
-            console.print("  Start the Ollama application from the Start menu")
-        else:
-            console.print("  Start Ollama with:")
-            console.print("  [cyan]ollama serve[/cyan]")
-        console.print()
-        console.print("[dim]Download Ollama: https://ollama.com/download[/dim]")
-        return False
+        pass
+
+    os_name = platform.system()
+    console.print("[red bold]Cannot connect to Ollama[/red bold]")
+    console.print()
+    if os_name == "Darwin":
+        console.print("  Start Ollama from your Applications folder, or run:")
+        console.print("  [cyan]ollama serve[/cyan]")
+    elif os_name == "Windows":
+        console.print("  Start the Ollama application from the Start menu")
+    else:
+        console.print("  Start Ollama with:")
+        console.print("  [cyan]ollama serve[/cyan]")
+    console.print()
+    console.print("[dim]Download Ollama: https://ollama.com/download[/dim]")
+    return False
 
 
-def check_available_models(skip_models: list[str] | None = None) -> list:
-    """Check for available Ollama models and filter by skip list.
+def check_available_models(backend: Backend, skip_models: list[str] | None = None) -> list[dict]:
+    """Check for available models and filter by skip list.
 
     Args:
+        backend: Backend instance to query for models.
         skip_models: Model names to exclude from results.
 
     Returns:
-        List of available model objects (from ollama.list()), filtered
+        List of available model dicts (from backend.list_models()), filtered
         by skip_models. Empty list if no models are installed.
     """
     console = get_console()
-    response = ollama.list()
-    models = response.models
+    models = backend.list_models()
 
     # Filter skip list
     if skip_models:
-        models = [m for m in models if m.model not in skip_models]
+        models = [m for m in models if m['model'] not in skip_models]
 
     if not models:
         console.print("[yellow]No models found![/yellow]")
@@ -173,7 +177,7 @@ def check_available_models(skip_models: list[str] | None = None) -> list:
     return models
 
 
-def check_ram_for_models(models: list) -> None:
+def check_ram_for_models(models: list[dict]) -> None:
     """Warn if any model may exceed 80% of available system RAM.
 
     This is advisory only -- execution continues regardless. Uses
@@ -181,7 +185,7 @@ def check_ram_for_models(models: list) -> None:
     from the on-disk GGUF size.
 
     Args:
-        models: List of model objects from ollama.list().
+        models: List of model dicts from backend.list_models().
     """
     console = get_console()
     system_ram_gb = _get_system_ram_gb()
@@ -192,45 +196,52 @@ def check_ram_for_models(models: list) -> None:
     ram_threshold = system_ram_gb * 0.8
 
     for model in models:
-        disk_size_gb = model.size / (1024**3)
+        disk_size_gb = model['size'] / (1024**3)
         estimated_ram_gb = disk_size_gb * RAM_SAFETY_MULTIPLIER
 
         if estimated_ram_gb > ram_threshold:
             console.print(
-                f"[yellow]Warning:[/yellow] {model.model} may require "
+                f"[yellow]Warning:[/yellow] {model['model']} may require "
                 f"~{estimated_ram_gb:.1f} GB RAM "
                 f"({system_ram_gb:.0f} GB available)"
             )
 
 
 def run_preflight_checks(
+    backend: Backend | None = None,
     skip_models: list[str] | None = None,
     skip_checks: bool = False,
-) -> list:
+) -> list[dict]:
     """Run all pre-flight checks in order.
 
     Chain: connectivity (blocking) -> models (blocking) -> RAM (warning only).
 
     Args:
+        backend: Backend instance. If None, creates default ollama backend.
         skip_models: Model names to exclude from benchmarking.
         skip_checks: If True, skip the RAM warning check.
 
     Returns:
-        List of available model objects to benchmark.
+        List of available model dicts to benchmark.
 
     Raises:
-        SystemExit: If Ollama is unreachable or no models are found.
+        SystemExit: If backend is unreachable or no models are found.
     """
+    # Create default backend if not provided
+    if backend is None:
+        from llm_benchmark.backends import create_backend
+        backend = create_backend()
+
     # 0. Installation check (blocking)
     if not check_ollama_installed():
         sys.exit(1)
 
     # 1. Connectivity check (blocking)
-    if not check_ollama_connectivity():
+    if not check_backend_connectivity(backend):
         sys.exit(1)
 
     # 2. Model availability (blocking)
-    models = check_available_models(skip_models=skip_models)
+    models = check_available_models(backend, skip_models=skip_models)
     if not models:
         sys.exit(1)
 

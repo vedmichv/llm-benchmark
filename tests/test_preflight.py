@@ -1,4 +1,4 @@
-"""Tests for pre-flight checks (Ollama connectivity, model availability, RAM warnings)."""
+"""Tests for pre-flight checks (backend connectivity, model availability, RAM warnings)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,18 @@ import platform
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+def _make_mock_backend(**kwargs) -> MagicMock:
+    """Create a mock Backend with default behavior."""
+    backend = MagicMock()
+    backend.name = "ollama"
+    backend.version = "0.6.1"
+    backend.check_connectivity.return_value = True
+    backend.list_models.return_value = []
+    for k, v in kwargs.items():
+        setattr(backend, k, v)
+    return backend
 
 
 class TestOllamaInstallation:
@@ -106,27 +118,29 @@ class TestOllamaInstallation:
         """run_preflight_checks calls check_ollama_installed before connectivity check."""
         from llm_benchmark.preflight import run_preflight_checks
 
+        backend = _make_mock_backend()
+
         with (
             patch("llm_benchmark.preflight.check_ollama_installed", return_value=False) as mock_install,
-            patch("llm_benchmark.preflight.check_ollama_connectivity") as mock_conn,
+            patch("llm_benchmark.preflight.check_backend_connectivity") as mock_conn,
         ):
             with pytest.raises(SystemExit) as exc_info:
-                run_preflight_checks()
+                run_preflight_checks(backend=backend)
             assert exc_info.value.code == 1
             mock_install.assert_called_once()
             mock_conn.assert_not_called()
 
 
-class TestOllamaConnectivity:
-    """Tests for check_ollama_connectivity()."""
+class TestBackendConnectivity:
+    """Tests for check_backend_connectivity()."""
 
-    def test_ollama_unreachable(self, capsys):
-        """When ollama.list() raises, returns False with platform-specific guidance."""
-        from llm_benchmark.preflight import check_ollama_connectivity
+    def test_backend_unreachable(self, capsys):
+        """When backend.check_connectivity() returns False, returns False with guidance."""
+        from llm_benchmark.preflight import check_backend_connectivity
 
-        with patch("llm_benchmark.preflight.ollama") as mock_ollama:
-            mock_ollama.list.side_effect = Exception("Connection refused")
-            result = check_ollama_connectivity()
+        backend = _make_mock_backend()
+        backend.check_connectivity.return_value = False
+        result = check_backend_connectivity(backend)
 
         assert result is False
         captured = capsys.readouterr()
@@ -141,13 +155,13 @@ class TestOllamaConnectivity:
         # Should contain download link
         assert "ollama.com" in captured.out
 
-    def test_ollama_reachable(self):
-        """When ollama.list() succeeds, returns True."""
-        from llm_benchmark.preflight import check_ollama_connectivity
+    def test_backend_reachable(self):
+        """When backend.check_connectivity() returns True, returns True."""
+        from llm_benchmark.preflight import check_backend_connectivity
 
-        with patch("llm_benchmark.preflight.ollama") as mock_ollama:
-            mock_ollama.list.return_value = MagicMock(models=[])
-            result = check_ollama_connectivity()
+        backend = _make_mock_backend()
+        backend.check_connectivity.return_value = True
+        result = check_backend_connectivity(backend)
 
         assert result is True
 
@@ -159,12 +173,10 @@ class TestAvailableModels:
         """When no models exist, returns empty list and suggests pulling a model."""
         from llm_benchmark.preflight import check_available_models
 
-        mock_response = MagicMock()
-        mock_response.models = []
+        backend = _make_mock_backend()
+        backend.list_models.return_value = []
 
-        with patch("llm_benchmark.preflight.ollama") as mock_ollama:
-            mock_ollama.list.return_value = mock_response
-            result = check_available_models()
+        result = check_available_models(backend)
 
         assert result == []
         captured = capsys.readouterr()
@@ -174,16 +186,13 @@ class TestAvailableModels:
         """When models exist, returns the model list."""
         from llm_benchmark.preflight import check_available_models
 
-        model1 = MagicMock()
-        model1.model = "llama3.2:1b"
-        model2 = MagicMock()
-        model2.model = "gemma:2b"
-        mock_response = MagicMock()
-        mock_response.models = [model1, model2]
+        backend = _make_mock_backend()
+        backend.list_models.return_value = [
+            {"model": "llama3.2:1b", "size": 1_000_000_000},
+            {"model": "gemma:2b", "size": 2_000_000_000},
+        ]
 
-        with patch("llm_benchmark.preflight.ollama") as mock_ollama:
-            mock_ollama.list.return_value = mock_response
-            result = check_available_models()
+        result = check_available_models(backend)
 
         assert len(result) == 2
 
@@ -191,19 +200,16 @@ class TestAvailableModels:
         """Models in skip list are excluded from results."""
         from llm_benchmark.preflight import check_available_models
 
-        model1 = MagicMock()
-        model1.model = "llama3.2:1b"
-        model2 = MagicMock()
-        model2.model = "gemma:2b"
-        mock_response = MagicMock()
-        mock_response.models = [model1, model2]
+        backend = _make_mock_backend()
+        backend.list_models.return_value = [
+            {"model": "llama3.2:1b", "size": 1_000_000_000},
+            {"model": "gemma:2b", "size": 2_000_000_000},
+        ]
 
-        with patch("llm_benchmark.preflight.ollama") as mock_ollama:
-            mock_ollama.list.return_value = mock_response
-            result = check_available_models(skip_models=["gemma:2b"])
+        result = check_available_models(backend, skip_models=["gemma:2b"])
 
         assert len(result) == 1
-        assert result[0].model == "llama3.2:1b"
+        assert result[0]['model'] == "llama3.2:1b"
 
 
 class TestRamWarning:
@@ -213,9 +219,7 @@ class TestRamWarning:
         """Model estimated to exceed 80% of RAM triggers warning but does not raise."""
         from llm_benchmark.preflight import check_ram_for_models
 
-        model = MagicMock()
-        model.model = "big-model:70b"
-        model.size = 7 * 1024 * 1024 * 1024  # 7GB on disk
+        model = {"model": "big-model:70b", "size": 7 * 1024 * 1024 * 1024}  # 7GB on disk
 
         with patch("llm_benchmark.preflight._get_system_ram_gb", return_value=8.0):
             # Should NOT raise -- just warn
@@ -228,9 +232,7 @@ class TestRamWarning:
         """Model within RAM limits produces no warning."""
         from llm_benchmark.preflight import check_ram_for_models
 
-        model = MagicMock()
-        model.model = "small-model:1b"
-        model.size = 4 * 1024 * 1024 * 1024  # 4GB on disk
+        model = {"model": "small-model:1b", "size": 4 * 1024 * 1024 * 1024}  # 4GB on disk
 
         with patch("llm_benchmark.preflight._get_system_ram_gb", return_value=32.0):
             check_ram_for_models([model])
@@ -245,37 +247,41 @@ class TestRunPreflightChecks:
     """Tests for run_preflight_checks()."""
 
     def test_preflight_exits_on_no_connectivity(self):
-        """Exits with code 1 when Ollama is unreachable."""
+        """Exits with code 1 when backend is unreachable."""
         from llm_benchmark.preflight import run_preflight_checks
 
+        backend = _make_mock_backend()
+
         with patch("llm_benchmark.preflight.check_ollama_installed", return_value=True), \
-             patch("llm_benchmark.preflight.check_ollama_connectivity", return_value=False):
+             patch("llm_benchmark.preflight.check_backend_connectivity", return_value=False):
             with pytest.raises(SystemExit) as exc_info:
-                run_preflight_checks()
+                run_preflight_checks(backend=backend)
             assert exc_info.value.code == 1
 
     def test_preflight_exits_on_no_models(self):
         """Exits with code 1 when no models are available."""
         from llm_benchmark.preflight import run_preflight_checks
 
+        backend = _make_mock_backend()
+
         with patch("llm_benchmark.preflight.check_ollama_installed", return_value=True), \
-             patch("llm_benchmark.preflight.check_ollama_connectivity", return_value=True), \
+             patch("llm_benchmark.preflight.check_backend_connectivity", return_value=True), \
              patch("llm_benchmark.preflight.check_available_models", return_value=[]):
             with pytest.raises(SystemExit) as exc_info:
-                run_preflight_checks()
+                run_preflight_checks(backend=backend)
             assert exc_info.value.code == 1
 
     def test_preflight_skips_ram_check_when_skip_checks(self):
         """With skip_checks=True, RAM check is skipped."""
         from llm_benchmark.preflight import run_preflight_checks
 
-        model = MagicMock()
-        model.model = "test:1b"
+        backend = _make_mock_backend()
+        model = {"model": "test:1b", "size": 1_000_000_000}
 
         with patch("llm_benchmark.preflight.check_ollama_installed", return_value=True), \
-             patch("llm_benchmark.preflight.check_ollama_connectivity", return_value=True), \
+             patch("llm_benchmark.preflight.check_backend_connectivity", return_value=True), \
              patch("llm_benchmark.preflight.check_available_models", return_value=[model]), \
              patch("llm_benchmark.preflight.check_ram_for_models") as mock_ram:
-            result = run_preflight_checks(skip_checks=True)
+            result = run_preflight_checks(backend=backend, skip_checks=True)
             mock_ram.assert_not_called()
             assert len(result) == 1

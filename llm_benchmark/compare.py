@@ -86,7 +86,8 @@ def compare_results(
                 f"  GPU: {sys_info.get('gpu', 'N/A')}  |  "
                 f"CPU: {sys_info.get('cpu', 'N/A')}  |  "
                 f"RAM: {sys_info.get('ram_gb', 0):.0f} GB  |  "
-                f"Ollama: {sys_info.get('ollama_version', 'N/A')}"
+                f"{sys_info.get('backend_name', 'Ollama').title()}: "
+                f"{sys_info.get('backend_version', sys_info.get('ollama_version', 'N/A'))}"
             )
         else:
             console.print(f"[bold]{label}:[/bold] System info not available")

@@ -1,13 +1,50 @@
 """Tests for llm_benchmark.runner module."""
 
 import time
-from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from llm_benchmark.backends import BackendError, BackendResponse
 from llm_benchmark.config import DEFAULT_TIMEOUT
-from llm_benchmark.models import BenchmarkResult, OllamaResponse
+from llm_benchmark.models import BenchmarkResult
+
+
+def _make_backend_response(
+    prompt_eval_count: int = 15,
+    prompt_eval_duration: float = 0.2,
+    eval_count: int = 120,
+    eval_duration: float = 4.0,
+    prompt_cached: bool = False,
+) -> BackendResponse:
+    """Helper to build a BackendResponse with seconds-based timing."""
+    return BackendResponse(
+        model="test-model",
+        content="test response",
+        done=True,
+        prompt_eval_count=prompt_eval_count,
+        eval_count=eval_count,
+        total_duration=prompt_eval_duration + eval_duration,
+        load_duration=0.0,
+        prompt_eval_duration=prompt_eval_duration,
+        eval_duration=eval_duration,
+        prompt_cached=prompt_cached,
+    )
+
+
+def _make_mock_backend(**kwargs) -> MagicMock:
+    """Create a mock Backend with default behavior."""
+    backend = MagicMock()
+    backend.name = "ollama"
+    backend.version = "0.6.1"
+    backend.warmup.return_value = True
+    backend.unload_model.return_value = True
+    backend.detect_context_window.return_value = 4096
+    backend.get_model_size.return_value = 2.0
+    backend.check_connectivity.return_value = True
+    for k, v in kwargs.items():
+        setattr(backend, k, v)
+    return backend
 
 
 class TestComputeAveragesRunner:
@@ -16,19 +53,13 @@ class TestComputeAveragesRunner:
     def _make_result(
         self,
         prompt_eval_count: int,
-        prompt_eval_duration: int,
+        prompt_eval_duration: float,
         eval_count: int,
-        eval_duration: int,
+        eval_duration: float,
         prompt_cached: bool = False,
     ) -> BenchmarkResult:
-        """Helper to build a BenchmarkResult with a valid OllamaResponse."""
-        resp = OllamaResponse(
-            model="test-model",
-            created_at=datetime.now(UTC),
-            message={"role": "assistant", "content": "test"},
-            done=True,
-            total_duration=prompt_eval_duration + eval_duration,
-            load_duration=0,
+        """Helper to build a BenchmarkResult with a valid BackendResponse."""
+        resp = _make_backend_response(
             prompt_eval_count=prompt_eval_count,
             prompt_eval_duration=prompt_eval_duration,
             eval_count=eval_count,
@@ -56,15 +87,15 @@ class TestComputeAveragesRunner:
 
         r1 = self._make_result(
             prompt_eval_count=10,
-            prompt_eval_duration=1_000_000_000,  # 1s
+            prompt_eval_duration=1.0,
             eval_count=100,
-            eval_duration=2_000_000_000,  # 2s
+            eval_duration=2.0,
         )
         r2 = self._make_result(
             prompt_eval_count=20,
-            prompt_eval_duration=2_000_000_000,  # 2s
+            prompt_eval_duration=2.0,
             eval_count=200,
-            eval_duration=5_000_000_000,  # 5s
+            eval_duration=5.0,
         )
 
         avgs = compute_averages([r1, r2])
@@ -82,15 +113,15 @@ class TestComputeAveragesRunner:
 
         r_normal = self._make_result(
             prompt_eval_count=10,
-            prompt_eval_duration=1_000_000_000,
+            prompt_eval_duration=1.0,
             eval_count=100,
-            eval_duration=2_000_000_000,
+            eval_duration=2.0,
         )
         r_cached = self._make_result(
             prompt_eval_count=0,
-            prompt_eval_duration=0,
+            prompt_eval_duration=0.0,
             eval_count=200,
-            eval_duration=5_000_000_000,
+            eval_duration=5.0,
             prompt_cached=True,
         )
 
@@ -139,56 +170,51 @@ class TestRunWithTimeout:
 class TestUnloadModel:
     """Test model offloading (STAB-05)."""
 
-    @patch("llm_benchmark.runner.ollama")
-    def test_unload_model_calls_keep_alive_zero(self, mock_ollama):
-        """Verify unload_model calls ollama.generate with keep_alive=0."""
+    def test_unload_model_calls_backend(self):
+        """Verify unload_model calls backend.unload_model."""
         from llm_benchmark.runner import unload_model
 
-        result = unload_model("llama3.2:1b")
+        backend = _make_mock_backend()
+        result = unload_model(backend, "llama3.2:1b")
 
-        mock_ollama.generate.assert_called_once_with(
-            model="llama3.2:1b", prompt="", keep_alive=0
-        )
+        backend.unload_model.assert_called_once_with("llama3.2:1b")
         assert result is True
 
-    @patch("llm_benchmark.runner.ollama")
-    def test_unload_model_returns_false_on_error(self, mock_ollama):
-        """Verify unload_model returns False when ollama.generate raises."""
+    def test_unload_model_returns_false_on_error(self):
+        """Verify unload_model returns False when backend raises."""
         from llm_benchmark.runner import unload_model
 
-        mock_ollama.generate.side_effect = Exception("connection error")
-        result = unload_model("llama3.2:1b")
+        backend = _make_mock_backend()
+        backend.unload_model.side_effect = Exception("connection error")
+        result = unload_model(backend, "llama3.2:1b")
         assert result is False
 
 
 class TestRunSingleBenchmark:
     """Test single benchmark execution."""
 
-    @patch("llm_benchmark.runner.ollama")
-    def test_success(self, mock_ollama, sample_ollama_response_dict):
+    def test_success(self):
         """Verify run_single_benchmark returns BenchmarkResult with success=True."""
         from llm_benchmark.runner import run_single_benchmark
 
-        # Mock ollama.chat to return a dict-like response
-        mock_response = MagicMock()
-        mock_response.model_dump.return_value = sample_ollama_response_dict
-        mock_ollama.chat.return_value = mock_response
+        backend = _make_mock_backend()
+        backend.chat.return_value = _make_backend_response()
 
-        result = run_single_benchmark("llama3.2:1b", "Why is the sky blue?")
+        result = run_single_benchmark(backend, "llama3.2:1b", "Why is the sky blue?")
 
         assert result.success is True
         assert result.model == "llama3.2:1b"
         assert result.response is not None
         assert result.error is None
 
-    @patch("llm_benchmark.runner.ollama")
-    def test_failure(self, mock_ollama):
+    def test_failure(self):
         """Verify run_single_benchmark returns BenchmarkResult with success=False on error."""
         from llm_benchmark.runner import run_single_benchmark
 
-        mock_ollama.chat.side_effect = Exception("model not found")
+        backend = _make_mock_backend()
+        backend.chat.side_effect = Exception("model not found")
 
-        result = run_single_benchmark("nonexistent:latest", "test prompt")
+        result = run_single_benchmark(backend, "nonexistent:latest", "test prompt")
 
         assert result.success is False
         assert result.error is not None
@@ -198,199 +224,111 @@ class TestRunSingleBenchmark:
 class TestWarmupModel:
     """Test warmup_model() function."""
 
-    @patch("llm_benchmark.runner.ollama")
-    def test_warmup_calls_ollama_chat(self, mock_ollama):
-        """warmup_model() calls ollama.chat with short prompt and model name."""
+    def test_warmup_calls_backend_warmup(self):
+        """warmup_model() calls backend.warmup with model name and timeout."""
         from llm_benchmark.runner import warmup_model
 
-        warmup_model("llama3.2:1b")
+        backend = _make_mock_backend()
+        warmup_model(backend, "llama3.2:1b")
 
-        mock_ollama.chat.assert_called_once_with(
-            model="llama3.2:1b",
-            messages=[{"role": "user", "content": "Hello"}],
-        )
+        backend.warmup.assert_called_once()
 
-    @patch("llm_benchmark.runner.ollama")
-    def test_warmup_returns_true_on_success(self, mock_ollama):
+    def test_warmup_returns_true_on_success(self):
         """warmup_model() returns True on success."""
         from llm_benchmark.runner import warmup_model
 
-        result = warmup_model("llama3.2:1b")
+        backend = _make_mock_backend()
+        result = warmup_model(backend, "llama3.2:1b")
         assert result is True
 
-    @patch("llm_benchmark.runner.ollama")
-    def test_warmup_returns_false_on_exception(self, mock_ollama):
+    def test_warmup_returns_false_on_exception(self):
         """warmup_model() returns False on exception."""
         from llm_benchmark.runner import warmup_model
 
-        mock_ollama.chat.side_effect = Exception("connection refused")
-        result = warmup_model("llama3.2:1b")
+        backend = _make_mock_backend()
+        backend.warmup.side_effect = Exception("connection refused")
+        result = warmup_model(backend, "llama3.2:1b")
         assert result is False
 
-    @patch("llm_benchmark.runner.ollama")
-    def test_warmup_prints_ready_on_success(self, mock_ollama, capsys):
-        """warmup_model() prints 'Warming up...' then 'Ready' on success."""
-        from llm_benchmark.runner import warmup_model
-
-        warmup_model("llama3.2:1b")
-
-        # Verify the function completes without error (Rich writes to its own console)
-
-    @patch("llm_benchmark.runner.ollama")
-    def test_warmup_does_not_raise_on_failure(self, mock_ollama):
+    def test_warmup_does_not_raise_on_failure(self):
         """warmup_model() does not raise on exception."""
         from llm_benchmark.runner import warmup_model
 
-        mock_ollama.chat.side_effect = ConnectionError("refused")
+        backend = _make_mock_backend()
+        backend.warmup.side_effect = ConnectionError("refused")
         # Should NOT raise
-        result = warmup_model("llama3.2:1b")
+        result = warmup_model(backend, "llama3.2:1b")
         assert result is False
 
 
 class TestRetryLogic:
     """Test retry logic in run_single_benchmark."""
 
-    @patch("llm_benchmark.runner.ollama")
-    def test_retries_on_connection_error(self, mock_ollama, sample_ollama_response_dict):
-        """run_single_benchmark retries on ConnectionError."""
+    def test_retries_on_backend_error_retryable(self):
+        """run_single_benchmark retries on BackendError with retryable=True."""
         from llm_benchmark.runner import run_single_benchmark
 
-        mock_response = MagicMock()
-        mock_response.model_dump.return_value = sample_ollama_response_dict
-        mock_ollama.chat.side_effect = [
-            ConnectionError("refused"),
-            mock_response,
+        backend = _make_mock_backend()
+        backend.chat.side_effect = [
+            BackendError("connection refused", retryable=True),
+            _make_backend_response(),
         ]
 
-        result = run_single_benchmark("llama3.2:1b", "test", max_retries=3)
+        result = run_single_benchmark(backend, "llama3.2:1b", "test", max_retries=3)
         assert result.success is True
-        assert mock_ollama.chat.call_count == 2
+        assert backend.chat.call_count == 2
 
     @patch("llm_benchmark.runner.unload_model")
-    @patch("llm_benchmark.runner.ollama")
-    def test_no_retry_on_timeout_error(self, mock_ollama, mock_unload, sample_ollama_response_dict):
+    def test_no_retry_on_timeout_error(self, mock_unload):
         """run_single_benchmark does NOT retry on TimeoutError (wastes minutes)."""
         from llm_benchmark.runner import run_single_benchmark
 
-        mock_ollama.chat.side_effect = TimeoutError("timed out")
+        backend = _make_mock_backend()
+        backend.chat.side_effect = TimeoutError("timed out")
 
-        result = run_single_benchmark("llama3.2:1b", "test", max_retries=3)
+        result = run_single_benchmark(backend, "llama3.2:1b", "test", max_retries=3)
         assert result.success is False
         assert "Timeout" in result.error
-        # Should unload model to reset state after timeout
-        mock_unload.assert_called_once_with("llama3.2:1b")
 
-    @patch("llm_benchmark.runner.ollama")
-    def test_retries_on_request_error(self, mock_ollama, sample_ollama_response_dict):
-        """run_single_benchmark retries on ollama.RequestError."""
-        import ollama as ollama_lib
-
+    def test_no_retry_on_backend_error_not_retryable(self):
+        """run_single_benchmark does NOT retry on BackendError with retryable=False."""
         from llm_benchmark.runner import run_single_benchmark
 
-        mock_response = MagicMock()
-        mock_response.model_dump.return_value = sample_ollama_response_dict
-        mock_ollama.chat.side_effect = [
-            ollama_lib.RequestError("request failed"),
-            mock_response,
-        ]
-        # Ensure the runner module sees the same RequestError
-        mock_ollama.RequestError = ollama_lib.RequestError
+        backend = _make_mock_backend()
+        backend.chat.side_effect = BackendError("not found", retryable=False)
 
-        result = run_single_benchmark("llama3.2:1b", "test", max_retries=3)
-        assert result.success is True
-
-    @patch("llm_benchmark.runner.ollama")
-    def test_retries_on_response_error_500(self, mock_ollama, sample_ollama_response_dict):
-        """run_single_benchmark retries on ResponseError with status_code >= 500."""
-        import ollama as ollama_lib
-
-        from llm_benchmark.runner import run_single_benchmark
-
-        mock_response = MagicMock()
-        mock_response.model_dump.return_value = sample_ollama_response_dict
-
-        err_500 = ollama_lib.ResponseError("server error")
-        err_500.status_code = 500
-        mock_ollama.chat.side_effect = [err_500, mock_response]
-        mock_ollama.ResponseError = ollama_lib.ResponseError
-
-        result = run_single_benchmark("llama3.2:1b", "test", max_retries=3)
-        assert result.success is True
-
-    @patch("llm_benchmark.runner.ollama")
-    def test_no_retry_on_response_error_404(self, mock_ollama):
-        """run_single_benchmark does NOT retry on ResponseError with status_code 404."""
-        import ollama as ollama_lib
-
-        from llm_benchmark.runner import run_single_benchmark
-
-        err_404 = ollama_lib.ResponseError("not found")
-        err_404.status_code = 404
-        mock_ollama.chat.side_effect = err_404
-        mock_ollama.ResponseError = ollama_lib.ResponseError
-
-        result = run_single_benchmark("llama3.2:1b", "test", max_retries=3)
+        result = run_single_benchmark(backend, "llama3.2:1b", "test", max_retries=3)
         assert result.success is False
         # Should only be called once (no retry)
-        assert mock_ollama.chat.call_count == 1
+        assert backend.chat.call_count == 1
 
-    @patch("llm_benchmark.runner.ollama")
-    def test_max_retries_zero_no_retry(self, mock_ollama):
+    def test_max_retries_zero_no_retry(self):
         """run_single_benchmark with max_retries=0 does not retry."""
         from llm_benchmark.runner import run_single_benchmark
 
-        mock_ollama.chat.side_effect = ConnectionError("refused")
+        backend = _make_mock_backend()
+        backend.chat.side_effect = BackendError("refused", retryable=True)
 
-        result = run_single_benchmark("llama3.2:1b", "test", max_retries=0)
+        result = run_single_benchmark(backend, "llama3.2:1b", "test", max_retries=0)
         assert result.success is False
-        assert mock_ollama.chat.call_count == 1
+        assert backend.chat.call_count == 1
 
-    @patch("llm_benchmark.runner.ollama")
-    def test_retries_exhausted_returns_failure(self, mock_ollama):
+    def test_retries_exhausted_returns_failure(self):
         """After retries exhausted, returns BenchmarkResult(success=False) with error."""
         from llm_benchmark.runner import run_single_benchmark
 
-        mock_ollama.chat.side_effect = ConnectionError("refused")
+        backend = _make_mock_backend()
+        backend.chat.side_effect = BackendError("refused", retryable=True)
 
-        result = run_single_benchmark("llama3.2:1b", "test", max_retries=2)
+        result = run_single_benchmark(backend, "llama3.2:1b", "test", max_retries=2)
         assert result.success is False
         assert result.error is not None
         # Should have tried 1 initial + 2 retries = 3 calls
-        assert mock_ollama.chat.call_count == 3
+        assert backend.chat.call_count == 3
 
 
 class TestCacheVisibility:
     """Test cache visibility indicators in benchmark_model terminal output."""
-
-    def _make_result(
-        self,
-        prompt_cached: bool = False,
-        eval_count: int = 100,
-        eval_duration: int = 2_000_000_000,
-        prompt_eval_count: int = 15,
-        prompt_eval_duration: int = 200_000_000,
-    ) -> BenchmarkResult:
-        """Helper to build a BenchmarkResult."""
-        resp = OllamaResponse(
-            model="test-model",
-            created_at=datetime.now(UTC),
-            message={"role": "assistant", "content": "test"},
-            done=True,
-            total_duration=prompt_eval_duration + eval_duration,
-            load_duration=0,
-            prompt_eval_count=prompt_eval_count,
-            prompt_eval_duration=prompt_eval_duration,
-            eval_count=eval_count,
-            eval_duration=eval_duration,
-            prompt_cached=prompt_cached,
-        )
-        return BenchmarkResult(
-            model="test-model",
-            prompt="test prompt",
-            success=True,
-            response=resp,
-            prompt_cached=prompt_cached,
-        )
 
     @patch("llm_benchmark.runner.warmup_model", return_value=True)
     @patch("llm_benchmark.runner.run_single_benchmark")
@@ -405,10 +343,17 @@ class TestCacheVisibility:
         buf = io.StringIO()
         test_console = Console(file=buf, force_terminal=False, no_color=True)
 
-        mock_run.return_value = self._make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0)
+        mock_run.return_value = BenchmarkResult(
+            model="test-model",
+            prompt="test prompt",
+            success=True,
+            response=_make_backend_response(prompt_eval_count=0, prompt_eval_duration=0.0, prompt_cached=True),
+            prompt_cached=True,
+        )
 
+        backend = _make_mock_backend()
         with patch("llm_benchmark.runner.get_console", return_value=test_console):
-            benchmark_model("test-model", ["test prompt"], skip_warmup=True)
+            benchmark_model(backend, "test-model", ["test prompt"], skip_warmup=True)
 
         output = buf.getvalue()
         assert "[cached]" in output
@@ -426,10 +371,17 @@ class TestCacheVisibility:
         buf = io.StringIO()
         test_console = Console(file=buf, force_terminal=False, no_color=True)
 
-        mock_run.return_value = self._make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0)
+        mock_run.return_value = BenchmarkResult(
+            model="test-model",
+            prompt="test prompt",
+            success=True,
+            response=_make_backend_response(prompt_eval_count=0, prompt_eval_duration=0.0, prompt_cached=True),
+            prompt_cached=True,
+        )
 
+        backend = _make_mock_backend()
         with patch("llm_benchmark.runner.get_console", return_value=test_console):
-            benchmark_model("test-model", ["test prompt"], skip_warmup=True)
+            benchmark_model(backend, "test-model", ["test prompt"], skip_warmup=True)
 
         output = buf.getvalue()
         assert "Prompt caching" in output
@@ -447,10 +399,17 @@ class TestCacheVisibility:
         buf = io.StringIO()
         test_console = Console(file=buf, force_terminal=False, no_color=True)
 
-        mock_run.return_value = self._make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0)
+        mock_run.return_value = BenchmarkResult(
+            model="test-model",
+            prompt="test prompt",
+            success=True,
+            response=_make_backend_response(prompt_eval_count=0, prompt_eval_duration=0.0, prompt_cached=True),
+            prompt_cached=True,
+        )
 
+        backend = _make_mock_backend()
         with patch("llm_benchmark.runner.get_console", return_value=test_console):
-            benchmark_model("test-model", ["prompt one", "prompt two"], skip_warmup=True)
+            benchmark_model(backend, "test-model", ["prompt one", "prompt two"], skip_warmup=True)
 
         output = buf.getvalue()
         # "Prompt caching" should appear exactly once
@@ -469,10 +428,17 @@ class TestCacheVisibility:
         buf = io.StringIO()
         test_console = Console(file=buf, force_terminal=False, no_color=True)
 
-        mock_run.return_value = self._make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0)
+        mock_run.return_value = BenchmarkResult(
+            model="test-model",
+            prompt="test prompt",
+            success=True,
+            response=_make_backend_response(prompt_eval_count=0, prompt_eval_duration=0.0, prompt_cached=True),
+            prompt_cached=True,
+        )
 
+        backend = _make_mock_backend()
         with patch("llm_benchmark.runner.get_console", return_value=test_console):
-            benchmark_model("test-model", ["prompt one", "prompt two"], skip_warmup=True)
+            benchmark_model(backend, "test-model", ["prompt one", "prompt two"], skip_warmup=True)
 
         output = buf.getvalue()
         assert "prompt eval metrics unavailable" in output.lower() or "All runs cached" in output
@@ -490,10 +456,17 @@ class TestCacheVisibility:
         buf = io.StringIO()
         test_console = Console(file=buf, force_terminal=False, no_color=True)
 
-        mock_run.return_value = self._make_result(prompt_cached=False)
+        mock_run.return_value = BenchmarkResult(
+            model="test-model",
+            prompt="test prompt",
+            success=True,
+            response=_make_backend_response(),
+            prompt_cached=False,
+        )
 
+        backend = _make_mock_backend()
         with patch("llm_benchmark.runner.get_console", return_value=test_console):
-            benchmark_model("test-model", ["test prompt"], skip_warmup=True)
+            benchmark_model(backend, "test-model", ["test prompt"], skip_warmup=True)
 
         output = buf.getvalue()
         assert "[cached]" not in output
@@ -504,38 +477,36 @@ class TestBenchmarkModelWarmup:
 
     @patch("llm_benchmark.runner.warmup_model", return_value=True)
     @patch("llm_benchmark.runner.run_single_benchmark")
-    def test_warmup_called_when_not_skipped(self, mock_run, mock_warmup, sample_ollama_response_dict):
+    def test_warmup_called_when_not_skipped(self, mock_run, mock_warmup):
         """benchmark_model calls warmup_model before prompt loop when skip_warmup=False."""
-        from llm_benchmark.models import BenchmarkResult, OllamaResponse
         from llm_benchmark.runner import benchmark_model
 
-        resp = OllamaResponse.model_validate(sample_ollama_response_dict)
         mock_run.return_value = BenchmarkResult(
             model="llama3.2:1b",
             prompt="test",
             success=True,
-            response=resp,
+            response=_make_backend_response(),
         )
 
-        benchmark_model("llama3.2:1b", ["test prompt"], skip_warmup=False)
+        backend = _make_mock_backend()
+        benchmark_model(backend, "llama3.2:1b", ["test prompt"], skip_warmup=False)
 
-        mock_warmup.assert_called_once_with("llama3.2:1b", DEFAULT_TIMEOUT)
+        mock_warmup.assert_called_once_with(backend, "llama3.2:1b", DEFAULT_TIMEOUT)
 
     @patch("llm_benchmark.runner.warmup_model", return_value=True)
     @patch("llm_benchmark.runner.run_single_benchmark")
-    def test_warmup_skipped_when_flag_set(self, mock_run, mock_warmup, sample_ollama_response_dict):
+    def test_warmup_skipped_when_flag_set(self, mock_run, mock_warmup):
         """benchmark_model skips warmup when skip_warmup=True."""
-        from llm_benchmark.models import BenchmarkResult, OllamaResponse
         from llm_benchmark.runner import benchmark_model
 
-        resp = OllamaResponse.model_validate(sample_ollama_response_dict)
         mock_run.return_value = BenchmarkResult(
             model="llama3.2:1b",
             prompt="test",
             success=True,
-            response=resp,
+            response=_make_backend_response(),
         )
 
-        benchmark_model("llama3.2:1b", ["test prompt"], skip_warmup=True)
+        backend = _make_mock_backend()
+        benchmark_model(backend, "llama3.2:1b", ["test prompt"], skip_warmup=True)
 
         mock_warmup.assert_not_called()

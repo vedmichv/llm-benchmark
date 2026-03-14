@@ -5,12 +5,18 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from llm_benchmark.models import BenchmarkResult, OllamaResponse
+from llm_benchmark.backends import BackendResponse
+from llm_benchmark.models import BenchmarkResult
 
 
 @pytest.fixture
 def sample_ollama_response_dict():
-    """Return a valid Ollama response dict with realistic nanosecond values."""
+    """Return a valid Ollama response dict with realistic nanosecond values.
+
+    Note: This fixture retains nanosecond values for backward compatibility
+    with tests that test the OllamaBackend conversion layer. Tests for
+    modules that use BackendResponse directly should use sample_backend_response.
+    """
     return {
         "model": "llama3.2:1b",
         "created_at": datetime.now(UTC).isoformat(),
@@ -34,14 +40,30 @@ def cached_ollama_response_dict(sample_ollama_response_dict):
 
 
 @pytest.fixture
-def sample_benchmark_result(sample_ollama_response_dict):
-    """Return a successful BenchmarkResult with a valid OllamaResponse."""
-    response = OllamaResponse.model_validate(sample_ollama_response_dict)
+def sample_backend_response():
+    """Return a BackendResponse with realistic seconds-based values."""
+    return BackendResponse(
+        model="llama3.2:1b",
+        content="The sky is blue because...",
+        done=True,
+        prompt_eval_count=15,
+        eval_count=120,
+        total_duration=5.0,
+        load_duration=0.5,
+        prompt_eval_duration=0.2,
+        eval_duration=4.0,
+        prompt_cached=False,
+    )
+
+
+@pytest.fixture
+def sample_benchmark_result(sample_backend_response):
+    """Return a successful BenchmarkResult with a valid BackendResponse."""
     return BenchmarkResult(
         model="llama3.2:1b",
         prompt="Why is the sky blue?",
         success=True,
-        response=response,
+        response=sample_backend_response,
     )
 
 

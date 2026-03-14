@@ -28,6 +28,12 @@ class TestGetSystemInfo:
         info = get_system_info()
         assert "." in info.python_version
 
+    def test_returns_backend_fields(self):
+        """Verify backend_name and backend_version are populated."""
+        info = get_system_info()
+        assert info.backend_name == "ollama"
+        assert isinstance(info.backend_version, str)
+
 
 class TestFormatSystemSummary:
     """Test the compact one-line summary formatter."""
@@ -42,7 +48,7 @@ class TestFormatSystemSummary:
         summary = format_system_summary()
         assert "GB RAM" in summary
 
-    def test_contains_ollama(self):
-        """Verify the summary includes Ollama version."""
+    def test_contains_backend(self):
+        """Verify the summary includes backend version."""
         summary = format_system_summary()
         assert "Ollama" in summary
