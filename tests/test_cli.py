@@ -275,7 +275,7 @@ class TestBackendAll:
         assert args.backend == "all"
 
     def test_backend_all_triggers_comparison_branch(self):
-        """--backend all calls run_comparison instead of standard benchmark."""
+        """--backend all calls run_comparison and render_comparison_bar_chart for single model."""
         from llm_benchmark.cli import _handle_run
 
         args = argparse.Namespace(
@@ -296,8 +296,14 @@ class TestBackendAll:
         mock_status.running = True
         mock_status.name = "ollama"
 
+        mock_result = MagicMock()
+        mock_result.backend = "ollama"
+        mock_result.avg_response_ts = 42.0
+
         mock_comparison = MagicMock()
         mock_comparison.backends = ["ollama"]
+        mock_comparison.models = ["llama3.2:1b"]
+        mock_comparison.results = [mock_result]
 
         mock_system_info = MagicMock()
 
@@ -321,12 +327,98 @@ class TestBackendAll:
             patch("llm_benchmark.system.get_system_info", return_value=mock_system_info),
             patch("llm_benchmark.backends.create_backend", return_value=MagicMock()),
             patch("llm_benchmark.cli.get_console"),
+            patch(
+                "llm_benchmark.comparison.render_comparison_bar_chart",
+            ) as mock_bar_chart,
+            patch(
+                "llm_benchmark.comparison.render_comparison_matrix",
+            ) as mock_matrix,
         ):
             result = _handle_run(args)
 
         assert result == 0
         mock_detect.assert_called_once()
         mock_run_comp.assert_called_once()
+        mock_bar_chart.assert_called_once_with(
+            [("ollama", 42.0)], "llama3.2:1b"
+        )
+        mock_matrix.assert_not_called()
+
+    def test_backend_all_multi_model_calls_matrix(self):
+        """--backend all with 2+ models calls render_comparison_matrix, not bar chart."""
+        from llm_benchmark.cli import _handle_run
+
+        args = argparse.Namespace(
+            command="run",
+            backend="all",
+            prompt_set="medium",
+            prompts=None,
+            runs_per_prompt=2,
+            timeout=200,
+            skip_warmup=False,
+            max_retries=3,
+            verbose=False,
+            skip_models=[],
+            skip_checks=False,
+        )
+
+        mock_status = MagicMock()
+        mock_status.running = True
+        mock_status.name = "ollama"
+
+        mock_result_a = MagicMock()
+        mock_result_a.backend = "ollama"
+        mock_result_a.model = "model-a"
+        mock_result_a.avg_response_ts = 50.0
+
+        mock_result_b = MagicMock()
+        mock_result_b.backend = "ollama"
+        mock_result_b.model = "model-b"
+        mock_result_b.avg_response_ts = 35.0
+
+        mock_comparison = MagicMock()
+        mock_comparison.backends = ["ollama"]
+        mock_comparison.models = ["model-a", "model-b"]
+        mock_comparison.results = [mock_result_a, mock_result_b]
+
+        mock_system_info = MagicMock()
+
+        with (
+            patch(
+                "llm_benchmark.backends.detection.detect_backends",
+                return_value=[mock_status],
+            ),
+            patch(
+                "llm_benchmark.comparison.run_comparison",
+                return_value=mock_comparison,
+            ),
+            patch(
+                "llm_benchmark.comparison.export_comparison_json",
+                return_value=Path("results/comparison.json"),
+            ),
+            patch(
+                "llm_benchmark.comparison.export_comparison_markdown",
+                return_value=Path("results/comparison.md"),
+            ),
+            patch("llm_benchmark.system.get_system_info", return_value=mock_system_info),
+            patch("llm_benchmark.backends.create_backend", return_value=MagicMock()),
+            patch("llm_benchmark.cli.get_console"),
+            patch(
+                "llm_benchmark.comparison.render_comparison_bar_chart",
+            ) as mock_bar_chart,
+            patch(
+                "llm_benchmark.comparison.render_comparison_matrix",
+            ) as mock_matrix,
+        ):
+            result = _handle_run(args)
+
+        assert result == 0
+        mock_matrix.assert_called_once()
+        mock_bar_chart.assert_not_called()
+        # Verify the dict passed to render_comparison_matrix
+        call_args = mock_matrix.call_args[0][0]
+        assert "ollama" in call_args
+        assert len(call_args["ollama"]) == 2
 
     def test_backend_all_no_running_backends_returns_error(self):
         """--backend all with 0 running backends returns exit code 1."""
