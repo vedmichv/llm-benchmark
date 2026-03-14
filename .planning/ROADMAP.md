@@ -21,7 +21,7 @@
 
 - [x] **Phase 5: Backend Abstraction** - Extract Backend Protocol and OllamaBackend adapter with zero user-visible change (completed 2026-03-14)
 - [x] **Phase 6: New Backends** - Add llama.cpp and LM Studio backends with CLI integration and cross-platform support (completed 2026-03-14)
-- [x] **Phase 7: Cross-Backend Comparison** - Full comparison mode with matrix benchmarking, reports, and documentation (completed 2026-03-14)
+- [ ] **Phase 7: Cross-Backend Comparison** - Full comparison mode with matrix benchmarking, reports, and documentation (gap closure in progress)
 
 ## Phase Details
 
@@ -70,12 +70,13 @@ Plans:
   3. Full matrix mode (N models x M backends) produces a comparison table with winner highlighted per model and an overall recommendation
   4. "Compare backends" appears as menu option 5 in the interactive menu
   5. README includes multi-backend quick start, per-OS setup guides for all 3 backends, and a real cross-backend comparison output example
-**Plans:** 3/3 plans complete
+**Plans:** 4 plans (3 complete, 1 gap closure)
 
 Plans:
-- [ ] 07-01-PLAN.md -- Comparison module: orchestration, display (bar chart + matrix), export (JSON + Markdown)
-- [ ] 07-02-PLAN.md -- CLI --backend all and menu option 5 wiring
-- [ ] 07-03-PLAN.md -- README multi-backend setup guides and comparison example
+- [x] 07-01-PLAN.md -- Comparison module: orchestration, display (bar chart + matrix), export (JSON + Markdown)
+- [x] 07-02-PLAN.md -- CLI --backend all and menu option 5 wiring
+- [x] 07-03-PLAN.md -- README multi-backend setup guides and comparison example
+- [ ] 07-04-PLAN.md -- Gap closure: wire display functions into CLI execution path
 
 ## Progress
 
@@ -90,4 +91,4 @@ Phases execute in numeric order: 5 -> 6 -> 7
 | 4. Student Experience | v1.0 | 3/3 | Complete | 2026-03-13 |
 | 5. Backend Abstraction | v2.0 | 3/3 | Complete | 2026-03-14 |
 | 6. New Backends | v2.0 | 5/5 | Complete | 2026-03-14 |
-| 7. Cross-Backend Comparison | 3/3 | Complete   | 2026-03-14 | - |
+| 7. Cross-Backend Comparison | v2.0 | 3/4 | Gap Closure | - |
