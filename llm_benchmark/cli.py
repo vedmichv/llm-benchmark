@@ -36,9 +36,9 @@ def _build_parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser("run", help="Run benchmarks")
     run_parser.add_argument(
         "--backend",
-        choices=["ollama", "llama-cpp", "lm-studio"],
+        choices=["ollama", "llama-cpp", "lm-studio", "all"],
         default="ollama",
-        help="Backend to use (default: ollama)",
+        help="Backend to use (default: ollama, 'all' for cross-backend comparison)",
     )
     run_parser.add_argument(
         "--port",
@@ -228,6 +228,48 @@ def _handle_run(args: argparse.Namespace) -> int:
     from llm_benchmark.system import format_system_summary, get_system_info
 
     console = get_console()
+
+    # --- Comparison mode (--backend all) ---
+    if args.backend == "all":
+        from llm_benchmark.backends.detection import detect_backends
+        from llm_benchmark.comparison import (
+            export_comparison_json,
+            export_comparison_markdown,
+            run_comparison,
+        )
+
+        statuses = detect_backends()
+        running = [s for s in statuses if s.running]
+        if not running:
+            console.print(
+                "[red]No running backends detected.[/red] "
+                "Start at least one backend (e.g. ollama serve) and retry."
+            )
+            return 1
+
+        prompts = args.prompts or get_prompts(args.prompt_set)
+        comparison = run_comparison(
+            backends=running,
+            prompts=prompts,
+            runs_per_prompt=args.runs_per_prompt,
+            timeout=args.timeout,
+            skip_warmup=args.skip_warmup,
+            max_retries=args.max_retries,
+            verbose=args.verbose,
+            skip_models=args.skip_models,
+            skip_checks=args.skip_checks,
+        )
+
+        # Export results
+        first_backend = create_backend(running[0].name)
+        system_info = get_system_info(backend=first_backend)
+        json_path = export_comparison_json(comparison, system_info)
+        md_path = export_comparison_markdown(comparison, system_info)
+        console.print("[bold]Comparison results saved:[/bold]")
+        console.print(f"  JSON: {json_path}")
+        console.print(f"  MD:   {md_path}")
+        return 0
+
     backend = create_backend(args.backend, port=args.port)
 
     # Store model_path on backend for llama-cpp preflight/auto-start

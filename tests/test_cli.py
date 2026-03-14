@@ -282,6 +282,7 @@ class TestBackendAll:
             command="run",
             backend="all",
             prompt_set="medium",
+            prompts=None,
             runs_per_prompt=2,
             timeout=200,
             skip_warmup=False,
@@ -302,22 +303,23 @@ class TestBackendAll:
 
         with (
             patch(
-                "llm_benchmark.cli.detect_backends",
+                "llm_benchmark.backends.detection.detect_backends",
                 return_value=[mock_status],
             ) as mock_detect,
             patch(
-                "llm_benchmark.cli.run_comparison",
+                "llm_benchmark.comparison.run_comparison",
                 return_value=mock_comparison,
             ) as mock_run_comp,
             patch(
-                "llm_benchmark.cli.export_comparison_json",
+                "llm_benchmark.comparison.export_comparison_json",
                 return_value=Path("results/comparison.json"),
             ),
             patch(
-                "llm_benchmark.cli.export_comparison_markdown",
+                "llm_benchmark.comparison.export_comparison_markdown",
                 return_value=Path("results/comparison.md"),
             ),
-            patch("llm_benchmark.cli.get_system_info", return_value=mock_system_info),
+            patch("llm_benchmark.system.get_system_info", return_value=mock_system_info),
+            patch("llm_benchmark.backends.create_backend", return_value=MagicMock()),
             patch("llm_benchmark.cli.get_console"),
         ):
             result = _handle_run(args)
@@ -334,6 +336,7 @@ class TestBackendAll:
             command="run",
             backend="all",
             prompt_set="medium",
+            prompts=None,
             runs_per_prompt=2,
             timeout=200,
             skip_warmup=False,
@@ -348,7 +351,7 @@ class TestBackendAll:
 
         with (
             patch(
-                "llm_benchmark.cli.detect_backends",
+                "llm_benchmark.backends.detection.detect_backends",
                 return_value=[mock_status],
             ),
             patch("llm_benchmark.cli.get_console"),
