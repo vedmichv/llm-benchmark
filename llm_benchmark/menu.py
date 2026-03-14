@@ -428,6 +428,42 @@ def _mode_custom(
     )
 
 
+def _mode_compare(backend: str = "ollama") -> argparse.Namespace:
+    """Compare backends mode: detect backends and return comparison Namespace."""
+    from llm_benchmark.backends.detection import (
+        detect_backends,
+        get_install_instructions,
+    )
+
+    console = get_console()
+
+    statuses = detect_backends()
+    running = [s for s in statuses if s.running]
+
+    if len(running) <= 1:
+        console.print(
+            "[yellow]Only 1 backend detected. "
+            "Install another backend to compare:[/yellow]"
+        )
+        not_running = [s for s in statuses if not s.running]
+        for s in not_running:
+            hint = get_install_instructions(s.name)
+            console.print(f"  {s.name}: {hint}")
+        console.print()
+    else:
+        names = ", ".join(s.name for s in running)
+        console.print(f"[bold]Comparing {len(running)} backends: {names}[/bold]")
+        console.print()
+
+    return _build_namespace(
+        backend="all",
+        prompt_set="medium",
+        runs_per_prompt=2,
+        skip_warmup=False,
+        skip_models=None,
+    )
+
+
 def run_interactive_menu(backend, models: list) -> argparse.Namespace:
     """Display the interactive menu and return a populated Namespace.
 
@@ -468,9 +504,10 @@ def run_interactive_menu(backend, models: list) -> argparse.Namespace:
     console.print("  2. Standard benchmark")
     console.print("  3. Full benchmark")
     console.print("  4. Custom")
+    console.print("  5. Compare backends")
     console.print()
 
-    choice = _prompt_choice("Select mode [1-4]: ", {"1", "2", "3", "4"})
+    choice = _prompt_choice("Select mode [1-5]: ", {"1", "2", "3", "4", "5"})
     console.print()
 
     if choice == "1":
@@ -479,4 +516,6 @@ def run_interactive_menu(backend, models: list) -> argparse.Namespace:
         return _mode_standard(backend=backend_name, model_path=model_path)
     if choice == "3":
         return _mode_full(backend=backend_name, model_path=model_path)
+    if choice == "5":
+        return _mode_compare(backend_name)
     return _mode_custom(models, backend=backend_name, model_path=model_path)
