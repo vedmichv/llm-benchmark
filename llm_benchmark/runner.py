@@ -32,6 +32,29 @@ from llm_benchmark.models import (
     ModelSummary,
 )
 
+# Known issues: (backend_name, error_substring) -> human-readable hint
+KNOWN_ISSUES: dict[tuple[str, str], str] = {
+    ("ollama", "timeout"): "Try a smaller model or increase --timeout",
+    ("ollama", "connection refused"): "Is Ollama running? Start with: ollama serve",
+    ("llama-cpp", "connection refused"): (
+        "Is llama-server running? Start with: llama-server -m <model>"
+    ),
+    ("llama-cpp", "timeout"): "llama-cpp may be overloaded; try reducing --num-ctx",
+    ("lm-studio", "connection refused"): (
+        "Is LM Studio running? Start the server from the LM Studio app"
+    ),
+    ("lm-studio", "timeout"): "LM Studio may need a smaller model loaded",
+}
+
+
+def get_known_issue_hint(backend_name: str, error_msg: str) -> str | None:
+    """Return a hint for a known error pattern, or None."""
+    error_lower = error_msg.lower()
+    for (bname, pattern), hint in KNOWN_ISSUES.items():
+        if bname == backend_name and pattern in error_lower:
+            return hint
+    return None
+
 
 def run_with_timeout(
     func: Any,
@@ -453,6 +476,10 @@ def benchmark_model(
                     _cache_explanation_shown = True
             elif not result.success:
                 console.print(f"    [red]Failed: {result.error}[/red]")
+                # Show known-issue hint if available
+                hint = get_known_issue_hint(backend.name, result.error or "")
+                if hint:
+                    console.print(f"    [yellow]Hint: {hint}[/yellow]")
                 if "Timeout" in (result.error or ""):
                     console.print(
                         "    [dim]Skipping remaining runs — reloading model...[/dim]"
@@ -467,6 +494,13 @@ def benchmark_model(
         console.print(
             "  [yellow]All runs cached -- prompt eval metrics "
             "unavailable for this model[/yellow]"
+        )
+
+    # Failure summary
+    failed = [r for r in all_results if not r.success]
+    if failed:
+        console.print(
+            f"  [yellow]Failures: {len(failed)}/{len(all_results)} runs failed[/yellow]"
         )
 
     avgs = compute_averages(all_results)
