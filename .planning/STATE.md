@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Multi-Backend Benchmark
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-03-14T16:54:42.207Z"
-last_activity: 2026-03-14 — 06-02 Backend detection and auto-start
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-03-14T16:55:14.000Z"
+last_activity: 2026-03-14 — 06-01 LlamaCppBackend and LMStudioBackend core classes
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 8
-  completed_plans: 4
-  percent: 80
+  completed_plans: 5
+  percent: 60
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-14)
 ## Current Position
 
 Phase: 6 of 7 (New Backends) -- IN PROGRESS
-Plan: 2 of 5 complete
+Plan: 3 of 5 complete
 Status: Executing
-Last activity: 2026-03-14 — 06-02 Backend detection and auto-start
+Last activity: 2026-03-14 — 06-01 LlamaCppBackend and LMStudioBackend core classes
 
-Progress: [████████░░] 80% (v2.0 Phase 6)
+Progress: [██████░░░░] 60% (v2.0 Phase 6)
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [████████░░] 80% (v2.0 Phase 6)
 - v1.0 plans averaged 6min each
 - Trend: Stable
 | Phase 06 P02 | 2min | 1 tasks | 2 files |
+| Phase 06 P01 | 5min | 1 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,10 @@ Recent decisions affecting current work:
 - [06-02]: httpx imported at module level for clean test mocking (not locally in function)
 - [06-02]: detect_backends skips port probe when binary not installed (running=False)
 - [Phase 06]: httpx imported at module level for clean test mocking
+- [06-01]: httpx.Client with base_url per backend instance (not shared)
+- [06-01]: SSE streaming parsed via iter_lines with data: prefix stripping
+- [06-01]: LM Studio eval_duration derived from eval_count / tokens_per_second
+- [06-01]: llama.cpp total_duration = prompt_ms + predicted_ms (no separate field)
 
 ### Pending Todos
 
@@ -91,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T16:54:42.204Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-03-14T16:55:14.000Z
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None

@@ -59,8 +59,8 @@
 
 ### New Backends (BEND)
 
-- [ ] **BEND-01**: LlamaCppBackend connects to llama-server via httpx, reads native /completion timings
-- [ ] **BEND-02**: LMStudioBackend connects to LM Studio via httpx, reads native /api/v1/ stats
+- [x] **BEND-01**: LlamaCppBackend connects to llama-server via httpx, reads native /completion timings
+- [x] **BEND-02**: LMStudioBackend connects to LM Studio via httpx, reads native /api/v1/ stats
 - [x] **BEND-03**: Auto-detect installed backends by checking binary presence (shutil.which)
 - [x] **BEND-04**: Auto-start backends if installed but not running (ollama serve, llama-server, lms server start)
 - [ ] **BEND-05**: Backend-specific preflight checks (non-fatal: skip unavailable backends gracefully)
@@ -156,8 +156,8 @@
 | BACK-03 | Phase 5 | Complete |
 | BACK-04 | Phase 5 | Complete |
 | BACK-05 | Phase 5 | Complete |
-| BEND-01 | Phase 6 | Pending |
-| BEND-02 | Phase 6 | Pending |
+| BEND-01 | Phase 6 | Complete |
+| BEND-02 | Phase 6 | Complete |
 | BEND-03 | Phase 6 | Complete |
 | BEND-04 | Phase 6 | Complete |
 | BEND-05 | Phase 6 | Pending |
