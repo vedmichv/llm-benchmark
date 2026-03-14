@@ -37,9 +37,9 @@
 **Plans:** 3/3 plans complete
 
 Plans:
-- [ ] 05-01-PLAN.md -- Create backends/ subpackage with Protocol, BackendResponse, OllamaBackend, and tests
-- [ ] 05-02-PLAN.md -- Refactor core modules (runner, models, preflight, system, exporters) to use Backend
-- [ ] 05-03-PLAN.md -- Refactor remaining modules (concurrent, sweep, recommend, menu, cli) and update all tests
+- [x] 05-01-PLAN.md -- Create backends/ subpackage with Protocol, BackendResponse, OllamaBackend, and tests
+- [x] 05-02-PLAN.md -- Refactor core modules (runner, models, preflight, system, exporters) to use Backend
+- [x] 05-03-PLAN.md -- Refactor remaining modules (concurrent, sweep, recommend, menu, cli) and update all tests
 
 ### Phase 6: New Backends
 **Goal**: Students can benchmark models on llama.cpp and LM Studio in addition to Ollama, with auto-detection and per-OS support
@@ -51,7 +51,14 @@ Plans:
   3. Running with no `--backend` flag defaults to Ollama with no change in behavior (backward compatible)
   4. When multiple backends are installed, the interactive menu shows detected backends and lets the user choose; when only Ollama is available, no backend prompt appears
   5. If a backend is installed but not running, the tool attempts to auto-start it (ollama serve, llama-server, lms server start)
-**Plans**: TBD
+**Plans:** 5 plans
+
+Plans:
+- [ ] 06-01-PLAN.md -- Implement LlamaCppBackend and LMStudioBackend core classes with tests
+- [ ] 06-02-PLAN.md -- Backend detection, auto-start, and platform-specific install instructions
+- [ ] 06-03-PLAN.md -- CLI --backend flag, create_backend() factory, and generalized preflight checks
+- [ ] 06-04-PLAN.md -- Backend-aware export filenames, system summary with backend inventory
+- [ ] 06-05-PLAN.md -- Interactive menu backend selection and error handling UX
 
 ### Phase 7: Cross-Backend Comparison
 **Goal**: Students can compare the same model across all backends side-by-side and see which runtime is fastest on their hardware
@@ -75,6 +82,6 @@ Phases execute in numeric order: 5 -> 6 -> 7
 | 2. Measurement Reliability | v1.0 | 2/2 | Complete | 2026-03-12 |
 | 3. Advanced Benchmarking | v1.0 | 4/4 | Complete | 2026-03-13 |
 | 4. Student Experience | v1.0 | 3/3 | Complete | 2026-03-13 |
-| 5. Backend Abstraction | 3/3 | Complete   | 2026-03-14 | - |
-| 6. New Backends | v2.0 | 0/? | Not started | - |
+| 5. Backend Abstraction | v2.0 | 3/3 | Complete | 2026-03-14 |
+| 6. New Backends | v2.0 | 0/5 | Not started | - |
 | 7. Cross-Backend Comparison | v2.0 | 0/? | Not started | - |
