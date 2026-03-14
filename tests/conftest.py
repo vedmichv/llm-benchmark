@@ -1,6 +1,7 @@
 """Shared test fixtures."""
 
 from datetime import UTC, datetime
+from typing import Any
 from unittest.mock import MagicMock
 
 import httpx
@@ -113,13 +114,16 @@ def make_httpx_response(
     headers: dict | None = None,
 ) -> httpx.Response:
     """Create a mock httpx.Response with the given data."""
-    resp = httpx.Response(
-        status_code=status_code,
-        headers=headers or {},
-        json=json_data,
-        text=text if json_data is None else "",
-    )
-    return resp
+    kwargs: dict[str, Any] = {
+        "status_code": status_code,
+        "headers": headers or {},
+        "request": httpx.Request("GET", "http://test"),
+    }
+    if json_data is not None:
+        kwargs["json"] = json_data
+    else:
+        kwargs["text"] = text
+    return httpx.Response(**kwargs)
 
 
 @pytest.fixture
