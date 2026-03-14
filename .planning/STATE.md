@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Multi-Backend Benchmark
 status: executing
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-03-14T17:02:42.000Z"
-last_activity: 2026-03-14 — 06-04 Backend-aware exports and system inventory
+stopped_at: Completed 06-05-PLAN.md
+last_updated: "2026-03-14T17:08:28.000Z"
+last_activity: 2026-03-14 — 06-05 Interactive menu backend selection
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
-  completed_plans: 7
-  percent: 80
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-14)
 
 ## Current Position
 
-Phase: 6 of 7 (New Backends) -- IN PROGRESS
-Plan: 4 of 5 complete
+Phase: 6 of 7 (New Backends) -- COMPLETE
+Plan: 5 of 5 complete
 Status: Executing
-Last activity: 2026-03-14 — 06-04 Backend-aware exports and system inventory
+Last activity: 2026-03-14 — 06-05 Interactive menu backend selection
 
-Progress: [████████░░] 80% (v2.0 Phase 6)
+Progress: [██████████] 100% (v2.0 Phase 6)
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Progress: [████████░░] 80% (v2.0 Phase 6)
 **Recent Trend:**
 - v1.0 plans averaged 6min each
 - Trend: Stable
+| Phase 06 P05 | 3min | 1 tasks | 3 files |
 | Phase 06 P04 | 5min | 2 tasks | 6 files |
 | Phase 06 P03 | 3min | 2 tasks | 5 files |
 | Phase 06 P02 | 2min | 1 tasks | 2 files |
@@ -91,6 +92,9 @@ Recent decisions affecting current work:
 - [06-04]: _filename() helper centralizes backend-aware filename generation for all export functions
 - [06-04]: detect_backends() lazy-imported in format_system_summary to avoid circular deps
 - [06-04]: KNOWN_ISSUES dict maps (backend_name, error_substring) to hints
+- [06-05]: select_backend_interactive() separate from run_interactive_menu() to keep menu signature stable
+- [06-05]: GGUF metadata extraction uses struct-based parser reading general.name key
+- [06-05]: Failure summary auto-skips failed models and shows Rich table at end (no per-model prompt)
 
 ### Pending Todos
 
@@ -104,6 +108,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-14T17:02:42.000Z
-Stopped at: Completed 06-04-PLAN.md
+Last session: 2026-03-14T17:08:28.000Z
+Stopped at: Completed 06-05-PLAN.md
 Resume file: None
