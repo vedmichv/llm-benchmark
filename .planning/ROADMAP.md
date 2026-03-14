@@ -51,7 +51,7 @@ Plans:
   3. Running with no `--backend` flag defaults to Ollama with no change in behavior (backward compatible)
   4. When multiple backends are installed, the interactive menu shows detected backends and lets the user choose; when only Ollama is available, no backend prompt appears
   5. If a backend is installed but not running, the tool attempts to auto-start it (ollama serve, llama-server, lms server start)
-**Plans:** 5 plans
+**Plans:** 4/5 plans executed
 
 Plans:
 - [ ] 06-01-PLAN.md -- Implement LlamaCppBackend and LMStudioBackend core classes with tests
@@ -83,5 +83,5 @@ Phases execute in numeric order: 5 -> 6 -> 7
 | 3. Advanced Benchmarking | v1.0 | 4/4 | Complete | 2026-03-13 |
 | 4. Student Experience | v1.0 | 3/3 | Complete | 2026-03-13 |
 | 5. Backend Abstraction | v2.0 | 3/3 | Complete | 2026-03-14 |
-| 6. New Backends | v2.0 | 0/5 | Not started | - |
+| 6. New Backends | 4/5 | In Progress|  | - |
 | 7. Cross-Backend Comparison | v2.0 | 0/? | Not started | - |
