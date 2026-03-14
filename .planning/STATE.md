@@ -1,36 +1,36 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: completed
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-03-13T12:54:14.132Z"
-last_activity: 2026-03-13 -- Plan 04-01 executed (interactive menu and bar chart)
+milestone: v2.0
+milestone_name: multi-backend
+status: active
+stopped_at: null
+last_updated: "2026-03-14T10:00:00Z"
+last_activity: 2026-03-14 -- Milestone v2.0 started
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-12)
+See: .planning/PROJECT.md (updated 2026-03-14)
 
 **Core value:** Student clones repo, runs one command, gets clear answer about their hardware's LLM capabilities.
-**Current focus:** Phase 4: Student Experience
+**Current focus:** Milestone v2.0 — Multi-Backend Benchmark
 
 ## Current Position
 
-Phase: 4 of 4 (Student Experience) -- IN PROGRESS
-Plan: 1 of ? in current phase
-Status: Plan 04-01 complete (interactive menu and bar chart)
-Last activity: 2026-03-13 - Completed quick task 2: Add Ollama installation check to preflight
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-14 — Milestone v2.0 started
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
