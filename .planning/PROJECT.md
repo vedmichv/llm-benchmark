@@ -2,26 +2,22 @@
 
 ## What This Is
 
-A Python CLI tool for students on a DevOps/Infrastructure course to benchmark LLM performance (tokens/sec) on their local hardware. Supports multiple inference backends (Ollama, llama.cpp, LM Studio) so students can compare not just models but also which runtime is fastest on their hardware. Interactive menu, visual results, shareable reports.
+A Python CLI tool for students on a DevOps/Infrastructure course to benchmark LLM performance (tokens/sec) on their local hardware. Supports three inference backends (Ollama, llama.cpp, LM Studio) with cross-backend comparison showing which runtime is fastest. Interactive menu, visual bar charts, shareable Markdown reports.
 
 ## Core Value
 
-A student clones the repo, runs one command, and gets a clear answer: "Here's what your machine can do with local LLMs, here's the best model/config for your setup."
+A student clones the repo, runs one command, and gets a clear answer: "Here's what your machine can do with local LLMs, here's the best model/config for your setup, and here's the fastest backend."
 
-## Current Milestone: v2.0 Multi-Backend Benchmark
+## Current State
 
-**Goal:** Add llama.cpp and LM Studio as alternative backends alongside Ollama, with cross-backend comparison mode showing which runtime is fastest for each model.
-
-**Target features:**
-- Backend abstraction layer (protocol + 3 implementations: Ollama, llama.cpp, LM Studio)
-- `--backend` CLI flag to select inference runtime
-- Auto-detect running backends
-- Cross-backend comparison: same model on all backends, side-by-side report
-- Setup guides for each backend (students need to know how to install)
+**Shipped:** v2.0 Multi-Backend Benchmark (2026-03-15)
+**Code:** 11,639 LOC Python + 5,416 LOC tests
+**Tests:** 325 passing, 63% coverage, CI pipeline
+**Next:** Planning next milestone
 
 ## Requirements
 
-### Validated (v1.0 shipped)
+### Validated
 
 - ✓ Benchmark models via Ollama API with streaming — v1.0 Phase 1
 - ✓ Prompt eval + response + total tokens/sec metrics — v1.0 Phase 1
@@ -44,17 +40,20 @@ A student clones the repo, runs one command, and gets a clear answer: "Here's wh
 - ✓ RAM-based model recommender — v1.0 Quick Task
 - ✓ Ollama auto-install check — v1.0 Quick Task
 - ✓ Auto-detect context window per model — v1.0 post-release
+- ✓ Backend abstraction layer (Backend Protocol + 3 implementations) — v2.0 Phase 5
+- ✓ llama.cpp backend via native /completion API — v2.0 Phase 6
+- ✓ LM Studio backend via native /v1/chat/completions API — v2.0 Phase 6
+- ✓ Auto-detect running backends (shutil.which + socket probe) — v2.0 Phase 6
+- ✓ Auto-start backends if installed but not running — v2.0 Phase 6
+- ✓ `--backend` CLI flag (ollama, llama-cpp, lm-studio, all) — v2.0 Phase 6
+- ✓ Cross-backend comparison with bar chart and matrix table — v2.0 Phase 7
+- ✓ "Fastest backend" recommendation per model — v2.0 Phase 7
+- ✓ Menu option 5 "Compare backends" with install hints — v2.0 Phase 7
+- ✓ Multi-backend setup guides in README (per-OS) — v2.0 Phase 7
 
-### Active (v2.0)
+### Active
 
-- [ ] Backend abstraction layer (protocol/ABC for inference backends)
-- [ ] llama.cpp backend via native /completion API
-- [ ] LM Studio backend via native /api/v0/ API
-- [ ] `--backend` CLI flag (ollama, llama-cpp, lm-studio)
-- [ ] Auto-detect running backends
-- [ ] Cross-backend comparison mode (same model, all backends, comparison report)
-- [ ] Setup documentation for llama.cpp and LM Studio
-- [ ] Backend-aware model management (GGUF paths for llama.cpp, JIT for LM Studio)
+(None — planning next milestone)
 
 ### Out of Scope
 
@@ -63,17 +62,18 @@ A student clones the repo, runs one command, and gets a clear answer: "Here's wh
 - 30+ environment variables — too overwhelming, use argparse CLI flags
 - Cloud API backends (OpenAI, Anthropic) — focus on local inference
 - Custom llama.cpp compilation optimization — students use Homebrew or prebuilt
+- Docker packaging — students need to understand local setup
+- llama-cpp-python binding — tool talks to llama-server via HTTP
+- Auto-download models for all backends — potential v3 feature
 
 ## Context
 
-- v1.0 complete: 4 phases, 12 plans, 152 tests, 2 quick tasks
-- Known Ollama bug with Qwen 3.5 MoE models (#14579, #14662) — motivation for llama.cpp alternative
-- llama.cpp typically 1.5-2x faster than Ollama on Apple Silicon (same model)
-- Research confirmed: all 3 backends have native APIs with server-side timing metrics
-- Each backend uses different native endpoint (NOT OpenAI-compat — that strips timing data)
-- llama.cpp: native `/completion` with `timings.predicted_per_second`
-- LM Studio: native `/api/v0/chat/completions` with `stats.tokens_per_second`
-- Ollama: native `/api/chat` with `eval_count`/`eval_duration` (current)
+- v1.0 shipped 2026-03-13: 4 phases, 12 plans, 152 tests
+- v2.0 shipped 2026-03-15: 7 phases, 31 plans, 325 tests
+- Tech stack: Python 3.12+, uv, Rich, Pydantic, httpx, tenacity
+- 3 backends: Ollama (default), llama.cpp (fastest on Apple Silicon), LM Studio (GUI-friendly)
+- llama-cpp typically 1.3x faster than Ollama on Apple Silicon (confirmed in UAT: 243 vs 190 t/s)
+- LM Studio comparable to Ollama speed (~190 t/s for same model)
 
 ## Constraints
 
@@ -87,14 +87,17 @@ A student clones the repo, runs one command, and gets a clear answer: "Here's wh
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Use Ollama API instead of llama.cpp | Simpler setup for students | ✓ Good (v1.0), expanding in v2.0 |
+| Use Ollama API instead of llama.cpp | Simpler setup for students | ✓ Good (v1.0), expanded in v2.0 |
 | Replace signal.SIGALRM with threading | Works on Windows | ✓ Good |
 | Replace sudo pkill with keep_alive=0 API | No sudo required | ✓ Good |
 | Package structure (llm_benchmark/) | Clean imports, testable | ✓ Good |
 | Rich Console for all output | Consistent formatting | ✓ Good |
-| Native APIs (not OpenAI-compat) for backends | OpenAI endpoint strips timing metrics | — v2.0 |
-| httpx for HTTP backends | async-ready, stdlib-like API | — v2.0 |
-| Backend protocol (not base class) | Lightweight, Pythonic | — v2.0 |
+| Native APIs (not OpenAI-compat) for backends | OpenAI endpoint strips timing metrics | ✓ Good — confirmed, LM Studio /v1/ has empty stats |
+| httpx for HTTP backends | async-ready, stdlib-like API | ✓ Good |
+| Backend protocol (not base class) | Lightweight, Pythonic, runtime_checkable | ✓ Good |
+| Sequential backend comparison (not parallel) | Backends share GPU resources, parallel corrupts timing | ✓ Good |
+| Ollama names as canonical for cross-backend matrix | Consistent model identity across backends | ✓ Good |
+| Wall-clock fallback for LM Studio timing | LM Studio non-streaming returns empty stats | ✓ Good |
 
 ---
-*Last updated: 2026-03-14 after v2.0 milestone start*
+*Last updated: 2026-03-15 after v2.0 milestone completion*
