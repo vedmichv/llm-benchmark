@@ -89,8 +89,8 @@ class TestChatNonStreaming:
             result = backend.chat("my-model", [{"role": "user", "content": "Hi"}])
         assert result.model == "my-lmstudio-model"
 
-    def test_chat_zero_tps_gives_zero_duration(self, mock_httpx_response):
-        """When tokens_per_second is 0, eval_duration should be 0."""
+    def test_chat_zero_tps_uses_elapsed_time(self, mock_httpx_response):
+        """When tokens_per_second is 0, eval_duration falls back to elapsed time."""
         backend = LMStudioBackend()
         data = {
             "choices": [{"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
@@ -101,7 +101,8 @@ class TestChatNonStreaming:
         mock_resp = mock_httpx_response(json_data=data)
         with patch.object(backend._client, "post", return_value=mock_resp):
             result = backend.chat("m", [{"role": "user", "content": "hi"}])
-        assert result.eval_duration == 0.0
+        assert result.eval_duration > 0.0
+        assert result.eval_count == 10
 
 
 # ---------------------------------------------------------------------------

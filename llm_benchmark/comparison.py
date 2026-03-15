@@ -161,6 +161,7 @@ def run_comparison(
         summaries = []
         for model_info in models:
             model_name = model_info["model"]
+            canonical_name = model_info.get("_canonical_name", model_name)
 
             # For llama-cpp, set model path if available
             if status.name == "llama-cpp" and "_gguf_path" in model_info:
@@ -176,6 +177,9 @@ def run_comparison(
                 skip_warmup=skip_warmup,
                 max_retries=max_retries,
             )
+            # Use canonical name so models align across backends in the matrix
+            if canonical_name != model_name:
+                summary.model = canonical_name
             summaries.append(summary)
             unload_model(backend, model_name)
 
@@ -203,6 +207,29 @@ def _prepare_llamacpp_models(
         Updated models list with _gguf_path entries where matches found.
     """
     console = get_console()
+
+    # Collect Ollama model names from prior results for reverse matching
+    ollama_names: list[str] = []
+    for bname, summaries in existing_results.items():
+        if bname == "ollama":
+            ollama_names = [s.model for s in summaries]
+
+    # If llama-cpp already has a loaded model, use it directly
+    # but try to match its name to an Ollama canonical name
+    if models and ollama_names:
+        matched_models = []
+        for model_info in models:
+            gguf_name = model_info["model"].lower().replace("-", "").replace("_", "").replace(".", "")
+            for ollama_name in ollama_names:
+                # Extract base and tag: "llama3.2:1b" -> "llama32", "1b"
+                parts = ollama_name.split(":")
+                base = parts[0].lower().replace(".", "").replace("-", "")
+                tag = parts[-1].lower() if len(parts) > 1 else ""
+                if base in gguf_name and (not tag or tag in gguf_name):
+                    model_info["_canonical_name"] = ollama_name
+                    break
+            matched_models.append(model_info)
+        return matched_models
 
     try:
         from llm_benchmark.menu import scan_gguf_files

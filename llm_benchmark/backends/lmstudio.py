@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from typing import Any, Iterator
 
 import httpx
@@ -77,10 +78,12 @@ class LMStudioBackend:
             if stream:
                 return self._handle_stream(model, payload)
 
+            t0 = time.perf_counter()
             resp = self._client.post("/v1/chat/completions", json=payload)
             resp.raise_for_status()
+            elapsed = time.perf_counter() - t0
             data = resp.json()
-            return self._to_response(data)
+            return self._to_response(data, elapsed=elapsed)
 
         except httpx.ConnectError as e:
             raise BackendError(str(e), retryable=True, original=e) from e
@@ -155,10 +158,13 @@ class LMStudioBackend:
 
         return StreamResult(chunks=chunk_generator(), finalize=finalize)
 
-    def _to_response(self, data: dict[str, Any]) -> BackendResponse:
+    def _to_response(
+        self, data: dict[str, Any], elapsed: float = 0.0
+    ) -> BackendResponse:
         """Convert LM Studio chat response to BackendResponse.
 
-        Derives eval_duration from eval_count / tokens_per_second.
+        Derives eval_duration from stats.tokens_per_second if available,
+        otherwise falls back to wall-clock elapsed time.
         """
         choices = data.get("choices", [])
         content = ""
@@ -172,7 +178,12 @@ class LMStudioBackend:
         prompt_eval_count = usage.get("prompt_tokens", 0)
         tps = stats.get("tokens_per_second", 0)
 
-        eval_duration = eval_count / tps if tps > 0 else 0.0
+        if tps > 0:
+            eval_duration = eval_count / tps
+        elif elapsed > 0:
+            eval_duration = elapsed
+        else:
+            eval_duration = 0.0
 
         return BackendResponse(
             model=data.get("model", ""),
