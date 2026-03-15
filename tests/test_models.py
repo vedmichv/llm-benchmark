@@ -3,7 +3,7 @@
 import pytest
 
 from llm_benchmark.backends import BackendResponse
-from llm_benchmark.models import BenchmarkResult, Message, ModelSummary, SystemInfo
+from llm_benchmark.models import BenchmarkResult, Message, SystemInfo
 
 
 def test_backend_response_fields():

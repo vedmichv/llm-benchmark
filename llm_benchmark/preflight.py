@@ -19,7 +19,6 @@ from llm_benchmark.backends.detection import (
 )
 from llm_benchmark.config import RAM_SAFETY_MULTIPLIER, get_console
 
-
 # Backend-specific start command hints shown when connectivity fails
 _START_HINTS: dict[str, str] = {
     "ollama": "ollama serve",

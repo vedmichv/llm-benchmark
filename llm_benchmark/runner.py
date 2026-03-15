@@ -20,11 +20,10 @@ from tenacity import (
     wait_exponential,
 )
 
-from llm_benchmark.backends import Backend, BackendError, BackendResponse, StreamResult
+from llm_benchmark.backends import Backend, BackendError, BackendResponse
 from llm_benchmark.config import (
     DEFAULT_MAX_RETRIES,
     DEFAULT_TIMEOUT,
-    DEFAULT_WARMUP_PROMPT,
     get_console,
 )
 from llm_benchmark.models import (

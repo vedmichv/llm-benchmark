@@ -8,7 +8,6 @@ import pytest
 from llm_benchmark.backends import Backend, BackendError, BackendResponse, StreamResult
 from llm_benchmark.backends.lmstudio import LMStudioBackend
 
-
 # ---------------------------------------------------------------------------
 # Protocol compliance
 # ---------------------------------------------------------------------------
@@ -328,6 +327,5 @@ class TestErrorHandling:
         error = httpx.HTTPStatusError(
             "server error", request=mock_resp._request, response=mock_resp
         )
-        with patch.object(backend._client, "post", side_effect=error):
-            with pytest.raises(BackendError):
-                backend.chat("m", [{"role": "user", "content": "hi"}])
+        with patch.object(backend._client, "post", side_effect=error), pytest.raises(BackendError):
+            backend.chat("m", [{"role": "user", "content": "hi"}])

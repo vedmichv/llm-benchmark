@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import platform
 from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 

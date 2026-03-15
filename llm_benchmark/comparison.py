@@ -28,7 +28,6 @@ from llm_benchmark.display import BAR_EMPTY, BAR_FULL, BAR_WIDTH
 from llm_benchmark.preflight import run_preflight_checks
 from llm_benchmark.runner import benchmark_model, unload_model
 
-
 # ---------------------------------------------------------------------------
 # Data Models
 # ---------------------------------------------------------------------------
@@ -81,16 +80,12 @@ def match_gguf_to_ollama_name(
     base = ollama_name.split(":")[0].lower().replace(".", "").replace("-", "")
     tag = ollama_name.split(":")[-1].lower() if ":" in ollama_name else ""
 
-    for path, display_name in gguf_files:
+    for path, _display_name in gguf_files:
         normalized = (
             path.stem.lower().replace("-", "").replace("_", "").replace(".", "")
         )
-        if base in normalized:
-            # Check size tag if present
-            if tag and tag in normalized:
-                return path
-            elif not tag:
-                return path
+        if base in normalized and (not tag or tag in normalized):
+            return path
 
     # Fallback: partial match on display_name
     for path, display_name in gguf_files:

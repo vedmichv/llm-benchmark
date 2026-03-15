@@ -270,7 +270,7 @@ def select_backend_interactive() -> tuple[str, int | None, str | None]:
         running = [s for s in statuses if s.running]
         valid_indices = {str(i) for i, s in enumerate(statuses, 1) if s.installed or s.running}
         if len(running) >= 2:
-            console.print(f"    c. [bold]Compare all backends[/bold]")
+            console.print("    c. [bold]Compare all backends[/bold]")
             console.print()
             valid_indices.add("c")
         choice = _prompt_choice(

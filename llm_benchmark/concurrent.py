@@ -16,7 +16,7 @@ import concurrent.futures
 import statistics
 import time
 
-from llm_benchmark.backends import Backend, BackendResponse
+from llm_benchmark.backends import Backend
 from llm_benchmark.config import (
     DEFAULT_CONCURRENT,
     DEFAULT_TIMEOUT,

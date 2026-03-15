@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-import socket
-import subprocess
-from dataclasses import dataclass
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, call, mock_open, patch
+from unittest.mock import MagicMock, Mock, mock_open, patch
 
 import pytest
 
@@ -197,9 +193,6 @@ class TestAutoStartBackend:
         mock_path_cls.return_value = mock_path_inst
         mock_path_inst.__truediv__ = lambda self, key: tmp_path / key
 
-        # Mock the open for log file
-        mock_log_file = MagicMock()
-
         mock_proc = MagicMock()
         mock_proc.poll.return_value = None
         mock_popen.return_value = mock_proc
@@ -305,9 +298,8 @@ class TestAutoStartBackend:
         # Simulate time passing beyond timeout
         mock_monotonic.side_effect = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
 
-        with patch("builtins.open", mock_open()):
-            with pytest.raises(BackendError, match="failed to start"):
-                auto_start_backend("ollama", timeout=5, log_dir=str(tmp_path))
+        with patch("builtins.open", mock_open()), pytest.raises(BackendError, match="failed to start"):
+            auto_start_backend("ollama", timeout=5, log_dir=str(tmp_path))
 
         mock_proc.terminate.assert_called_once()
 

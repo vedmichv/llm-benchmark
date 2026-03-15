@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from llm_benchmark.backends import BackendResponse
 from llm_benchmark.models import BenchmarkResult, ModelSummary
@@ -229,8 +226,11 @@ class TestExportComparisonJson:
 
     def test_writes_valid_json(self, tmp_path):
         """export_comparison_json writes valid JSON with backends, models, results, winners."""
-        from llm_benchmark.comparison import ComparisonResult, export_comparison_json
-        from llm_benchmark.comparison import BackendModelResult
+        from llm_benchmark.comparison import (
+            BackendModelResult,
+            ComparisonResult,
+            export_comparison_json,
+        )
         from llm_benchmark.models import SystemInfo
 
         comparison = ComparisonResult(
@@ -273,8 +273,11 @@ class TestExportComparisonMarkdown:
 
     def test_writes_markdown_with_matrix_and_recommendation(self, tmp_path):
         """export_comparison_markdown writes Markdown with matrix table and recommendation."""
-        from llm_benchmark.comparison import ComparisonResult, export_comparison_markdown
-        from llm_benchmark.comparison import BackendModelResult
+        from llm_benchmark.comparison import (
+            BackendModelResult,
+            ComparisonResult,
+            export_comparison_markdown,
+        )
         from llm_benchmark.models import SystemInfo
 
         comparison = ComparisonResult(

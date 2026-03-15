@@ -1,6 +1,5 @@
 """Tests for concurrent benchmarking module."""
 
-from unittest.mock import MagicMock
 
 from llm_benchmark.backends import BackendResponse
 from llm_benchmark.concurrent import (

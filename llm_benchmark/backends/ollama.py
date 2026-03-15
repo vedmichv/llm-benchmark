@@ -7,7 +7,8 @@ nanosecond timing data to seconds and maps ollama exceptions to BackendError.
 from __future__ import annotations
 
 import subprocess
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 import ollama
 from ollama import RequestError as _OllamaRequestError

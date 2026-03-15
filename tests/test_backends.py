@@ -15,7 +15,6 @@ from llm_benchmark.backends import (
 )
 from llm_benchmark.backends.ollama import OllamaBackend
 
-
 # ---------------------------------------------------------------------------
 # BackendResponse
 # ---------------------------------------------------------------------------
