@@ -1,49 +1,38 @@
 """Tests for Pydantic data models."""
 
-import io
-import sys
-
 import pytest
 
+from llm_benchmark.backends import BackendResponse
+from llm_benchmark.models import BenchmarkResult, Message, SystemInfo
 
-def test_ollama_response_valid(sample_ollama_response_dict):
-    """OllamaResponse validates a complete response dict successfully."""
-    from llm_benchmark.models import OllamaResponse
 
-    resp = OllamaResponse.model_validate(sample_ollama_response_dict)
+def test_backend_response_fields():
+    """BackendResponse stores timing in seconds."""
+    resp = BackendResponse(
+        model="llama3.2:1b",
+        content="The sky is blue because...",
+        done=True,
+        prompt_eval_count=15,
+        eval_count=120,
+        total_duration=5.0,
+        load_duration=0.5,
+        prompt_eval_duration=0.2,
+        eval_duration=4.0,
+    )
     assert resp.model == "llama3.2:1b"
     assert resp.eval_count == 120
     assert resp.prompt_eval_count == 15
     assert resp.prompt_cached is False
+    assert resp.eval_duration == 4.0
 
 
-def test_ollama_response_prompt_cached(cached_ollama_response_dict):
-    """prompt_eval_count=-1 sets to 0, sets prompt_cached=True, no print side effect."""
-    from llm_benchmark.models import OllamaResponse
-
-    # Capture stdout to verify no print side effect
-    captured = io.StringIO()
-    old_stdout = sys.stdout
-    sys.stdout = captured
-
-    resp = OllamaResponse.model_validate(cached_ollama_response_dict)
-
-    sys.stdout = old_stdout
-    assert resp.prompt_eval_count == 0
-    assert resp.prompt_cached is True
-    assert captured.getvalue() == "", "Validator should not print to stdout"
-
-
-def test_benchmark_result_success(sample_ollama_response_dict):
+def test_benchmark_result_success(sample_backend_response):
     """BenchmarkResult with success=True has response data."""
-    from llm_benchmark.models import BenchmarkResult, OllamaResponse
-
-    ollama_resp = OllamaResponse.model_validate(sample_ollama_response_dict)
     result = BenchmarkResult(
         model="llama3.2:1b",
         prompt="Why is the sky blue?",
         success=True,
-        response=ollama_resp,
+        response=sample_backend_response,
     )
     assert result.success is True
     assert result.response is not None
@@ -53,8 +42,6 @@ def test_benchmark_result_success(sample_ollama_response_dict):
 
 def test_benchmark_result_failure():
     """BenchmarkResult with success=False has error message."""
-    from llm_benchmark.models import BenchmarkResult
-
     result = BenchmarkResult(
         model="llama3.2:1b",
         prompt="Why is the sky blue?",
@@ -68,21 +55,41 @@ def test_benchmark_result_failure():
 
 def test_message_model():
     """Message model has role and content fields."""
-    from llm_benchmark.models import Message
-
     msg = Message(role="user", content="Hello")
     assert msg.role == "user"
     assert msg.content == "Hello"
 
 
-def test_compute_averages_correct(sample_ollama_response_dict):
+def test_system_info_backend_fields():
+    """SystemInfo has backend_name and backend_version fields."""
+    info = SystemInfo(
+        cpu="Apple M2",
+        ram_gb=16.0,
+        gpu="Apple M2 (integrated)",
+        os_name="macOS 14.0",
+        python_version="3.12.0",
+        backend_name="ollama",
+        backend_version="0.6.1",
+    )
+    assert info.backend_name == "ollama"
+    assert info.backend_version == "0.6.1"
+
+
+def test_compute_averages_correct():
     """compute_averages uses total_tokens/total_time (STAB-04)."""
-    from llm_benchmark.models import BenchmarkResult, OllamaResponse
     from llm_benchmark.runner import compute_averages
 
-    # Create two results with known values
-    resp1 = OllamaResponse.model_validate(sample_ollama_response_dict)
-    resp2 = OllamaResponse.model_validate(sample_ollama_response_dict)
+    # Create two results with known values (seconds-based)
+    resp1 = BackendResponse(
+        model="test", content="", done=True,
+        prompt_eval_count=15, eval_count=120,
+        total_duration=5.0, prompt_eval_duration=0.2, eval_duration=4.0,
+    )
+    resp2 = BackendResponse(
+        model="test", content="", done=True,
+        prompt_eval_count=15, eval_count=120,
+        total_duration=5.0, prompt_eval_duration=0.2, eval_duration=4.0,
+    )
 
     results = [
         BenchmarkResult(model="test", prompt="p1", success=True, response=resp1),

@@ -16,7 +16,8 @@ def _make_sample_results(models_data: list[dict]) -> dict:
             "cpu": "Test CPU",
             "ram_gb": 16.0,
             "gpu": "Test GPU",
-            "ollama_version": "0.6.0",
+            "backend_name": "ollama",
+            "backend_version": "0.6.0",
         },
         "models": models_data,
     }

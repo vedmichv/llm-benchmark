@@ -7,10 +7,9 @@ response tokens/second, and displays results in a Rich table.
 
 from __future__ import annotations
 
-import ollama
-from ollama import Options
 from rich.table import Table
 
+from llm_benchmark.backends import Backend
 from llm_benchmark.config import (
     DEFAULT_TIMEOUT,
     SWEEP_NUM_CTX,
@@ -20,32 +19,29 @@ from llm_benchmark.config import (
 from llm_benchmark.models import (
     SweepConfigResult,
     SweepModelResult,
-    _ns_to_sec,
 )
 from llm_benchmark.runner import unload_model, warmup_model
 from llm_benchmark.system import _get_gpu_info
 
 
-def get_model_layers(model_name: str) -> int | None:
-    """Detect the number of layers in a model from Ollama modelinfo.
+def get_model_layers(backend: Backend, model_name: str) -> int | None:
+    """Detect the number of layers in a model from backend model info.
 
-    Calls ``ollama.show()`` and searches modelinfo keys for any key
-    containing ``block_count`` (e.g. ``llama.block_count``).
+    Uses backend-specific ``get_model_layers()`` method if available
+    (duck typing). Otherwise returns None.
 
     Args:
-        model_name: Ollama model name (e.g. "llama3:8b").
+        backend: Backend instance.
+        model_name: Model name (e.g. "llama3:8b").
 
     Returns:
         Number of layers as int, or None if undetectable.
     """
-    try:
-        info = ollama.show(model_name)
-        modelinfo = getattr(info, "modelinfo", None) or {}
-        for key, value in modelinfo.items():
-            if "block_count" in key:
-                return int(value)
-    except Exception:
-        pass
+    if hasattr(backend, "get_model_layers"):
+        try:
+            return backend.get_model_layers(model_name)
+        except Exception:
+            pass
     return None
 
 
@@ -75,12 +71,13 @@ def build_sweep_configs(
 
 
 def _run_single_config(
-    model_name: str, num_ctx: int, num_gpu: int, timeout: int
+    backend: Backend, model_name: str, num_ctx: int, num_gpu: int, timeout: int
 ) -> SweepConfigResult:
     """Run a single sweep configuration and return the result.
 
     Args:
-        model_name: Ollama model name.
+        backend: Backend instance.
+        model_name: Model name.
         num_ctx: Context window size.
         num_gpu: Number of GPU layers.
         timeout: Timeout in seconds (currently informational; no threading
@@ -90,25 +87,22 @@ def _run_single_config(
         SweepConfigResult with metrics or success=False on error.
     """
     try:
-        response = ollama.chat(
+        response = backend.chat(
             model=model_name,
             messages=[{"role": "user", "content": SWEEP_PROMPT}],
-            options=Options(num_ctx=num_ctx, num_gpu=num_gpu),
+            options={"num_ctx": num_ctx, "num_gpu": num_gpu},
         )
 
-        # Extract timing metrics
-        eval_count = getattr(response, "eval_count", 0) or 0
-        eval_duration = getattr(response, "eval_duration", 0) or 0
-        total_duration = getattr(response, "total_duration", 0) or 0
-        prompt_eval_count = getattr(response, "prompt_eval_count", 0) or 0
-        prompt_eval_duration = getattr(response, "prompt_eval_duration", 0) or 0
-
-        eval_sec = _ns_to_sec(eval_duration)
-        total_sec = _ns_to_sec(total_duration)
+        # Response fields are already in seconds from BackendResponse
+        eval_count = response.eval_count
+        eval_sec = response.eval_duration
+        total_sec = response.total_duration
+        prompt_eval_count = response.prompt_eval_count
+        prompt_eval_sec = response.prompt_eval_duration
 
         response_ts = eval_count / eval_sec if eval_sec > 0 else 0.0
         total_tokens = eval_count + prompt_eval_count
-        total_time = eval_sec + _ns_to_sec(prompt_eval_duration)
+        total_time = eval_sec + prompt_eval_sec
         total_ts = total_tokens / total_time if total_time > 0 else 0.0
 
         return SweepConfigResult(
@@ -196,6 +190,7 @@ def _display_sweep_table(sweep_result: SweepModelResult) -> None:
 
 
 def run_sweep_for_model(
+    backend: Backend,
     model_name: str,
     timeout: int = DEFAULT_TIMEOUT,
     skip_warmup: bool = False,
@@ -206,7 +201,8 @@ def run_sweep_for_model(
     identifies the best configuration, and displays a summary table.
 
     Args:
-        model_name: Ollama model name (e.g. "llama3:8b").
+        backend: Backend instance.
+        model_name: Model name (e.g. "llama3:8b").
         timeout: Timeout in seconds per config.
         skip_warmup: If True, skip the warmup run.
 
@@ -220,7 +216,7 @@ def run_sweep_for_model(
     has_gpu = gpu_name != "No dedicated GPU"
 
     # Detect model layers
-    block_count = get_model_layers(model_name)
+    block_count = get_model_layers(backend, model_name)
     if block_count is not None:
         console.print(f"  Detected {block_count} layers for {model_name}")
     else:
@@ -233,7 +229,7 @@ def run_sweep_for_model(
 
     # Warmup once
     if not skip_warmup:
-        warmup_model(model_name, timeout)
+        warmup_model(backend, model_name, timeout)
 
     # Run each config
     results: list[SweepConfigResult] = []
@@ -242,7 +238,7 @@ def run_sweep_for_model(
             f"  Testing config {i + 1}/{total}: "
             f"num_ctx={num_ctx}, num_gpu={num_gpu}..."
         )
-        result = _run_single_config(model_name, num_ctx, num_gpu, timeout)
+        result = _run_single_config(backend, model_name, num_ctx, num_gpu, timeout)
         results.append(result)
 
         if result.success:
@@ -254,7 +250,7 @@ def run_sweep_for_model(
             console.print(f"    [red]Failed: {result.error}[/red]")
 
         # Unload between configs to force clean reload with new options
-        unload_model(model_name)
+        unload_model(backend, model_name)
 
     # Pick best
     successful = [c for c in results if c.success]

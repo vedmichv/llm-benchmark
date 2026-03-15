@@ -1,21 +1,22 @@
 """Tests for llm_benchmark.exporters module -- cache indicators and output."""
 
 import csv
-from datetime import UTC, datetime
+import json
 
+from llm_benchmark.backends import BackendResponse
 from llm_benchmark.models import (
     BenchmarkResult,
     ModelSummary,
-    OllamaResponse,
+    SystemInfo,
 )
 
 
 def _make_result(
     prompt_cached: bool = False,
     eval_count: int = 120,
-    eval_duration: int = 4_000_000_000,
+    eval_duration: float = 4.0,
     prompt_eval_count: int = 15,
-    prompt_eval_duration: int = 200_000_000,
+    prompt_eval_duration: float = 0.2,
     success: bool = True,
     error: str | None = None,
 ) -> BenchmarkResult:
@@ -27,13 +28,12 @@ def _make_result(
             success=False,
             error=error or "some error",
         )
-    resp = OllamaResponse(
+    resp = BackendResponse(
         model="test-model",
-        created_at=datetime.now(UTC),
-        message={"role": "assistant", "content": "test response"},
+        content="test response",
         done=True,
         total_duration=prompt_eval_duration + eval_duration,
-        load_duration=0,
+        load_duration=0.0,
         prompt_eval_count=prompt_eval_count,
         prompt_eval_duration=prompt_eval_duration,
         eval_count=eval_count,
@@ -54,7 +54,7 @@ def _make_summary(results: list[BenchmarkResult] | None = None) -> ModelSummary:
     if results is None:
         results = [
             _make_result(prompt_cached=False),
-            _make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0),
+            _make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0.0),
         ]
     return ModelSummary(
         model="test-model",
@@ -84,7 +84,7 @@ class TestCsvCacheColumn:
         """Cached run rows show 'Yes' in Cached column."""
         from llm_benchmark.exporters import export_csv
 
-        cached_result = _make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0)
+        cached_result = _make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0.0)
         summary = _make_summary([cached_result])
         filepath = export_csv([summary], output_dir=tmp_path)
 
@@ -133,7 +133,7 @@ class TestMarkdownCacheIndicator:
         """Markdown detailed results show '[cached]' for cached runs."""
         from llm_benchmark.exporters import export_markdown
 
-        cached_result = _make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0)
+        cached_result = _make_result(prompt_cached=True, prompt_eval_count=0, prompt_eval_duration=0.0)
         summary = _make_summary([cached_result])
         filepath = export_markdown([summary], output_dir=tmp_path)
 
@@ -226,7 +226,8 @@ class TestMarkdownRankings:
             gpu="Apple M1 (integrated)",
             os_name="macOS 14.0",
             python_version="3.12.0",
-            ollama_version="0.6.1",
+            backend_name="ollama",
+            backend_version="0.6.1",
         )
 
     def test_export_markdown_has_rankings(self, tmp_path):
@@ -291,3 +292,145 @@ class TestMarkdownRankings:
         assert "**System:**" in content
         assert "Apple M1" in content
         assert "16.0 GB RAM" in content
+
+
+def _make_system_info(backend_name: str = "ollama", backend_version: str = "0.6.1") -> SystemInfo:
+    """Helper to build a SystemInfo with configurable backend."""
+    return SystemInfo(
+        cpu="Apple M1",
+        ram_gb=16.0,
+        gpu="Apple M1 (integrated)",
+        os_name="macOS 14.0",
+        python_version="3.12.0",
+        backend_name=backend_name,
+        backend_version=backend_version,
+    )
+
+
+class TestBackendAwareFilenames:
+    """Test that export filenames include the backend name."""
+
+    def test_json_filename_includes_backend(self, tmp_path):
+        """JSON filename follows pattern: benchmark_{backend}_{timestamp}.json."""
+        from llm_benchmark.exporters import export_json
+
+        summary = _make_summary([_make_result()])
+        si = _make_system_info("llama-cpp", "b1234")
+        filepath = export_json([summary], system_info=si, output_dir=tmp_path)
+        assert filepath.name.startswith("benchmark_llama-cpp_")
+        assert filepath.suffix == ".json"
+
+    def test_csv_filename_includes_backend(self, tmp_path):
+        """CSV filename follows pattern: benchmark_{backend}_{timestamp}.csv."""
+        from llm_benchmark.exporters import export_csv
+
+        summary = _make_summary([_make_result()])
+        si = _make_system_info("ollama", "0.6.1")
+        filepath = export_csv([summary], system_info=si, output_dir=tmp_path)
+        assert filepath.name.startswith("benchmark_ollama_")
+        assert filepath.suffix == ".csv"
+
+    def test_markdown_filename_includes_backend(self, tmp_path):
+        """Markdown filename follows pattern: benchmark_{backend}_{timestamp}.md."""
+        from llm_benchmark.exporters import export_markdown
+
+        summary = _make_summary([_make_result()])
+        si = _make_system_info("lm-studio", "0.3.0")
+        filepath = export_markdown([summary], system_info=si, output_dir=tmp_path)
+        assert filepath.name.startswith("benchmark_lm-studio_")
+        assert filepath.suffix == ".md"
+
+    def test_filename_without_system_info_omits_backend(self, tmp_path):
+        """Without system_info, filename falls back to benchmark_{timestamp}."""
+        from llm_benchmark.exporters import export_json
+
+        summary = _make_summary([_make_result()])
+        filepath = export_json([summary], system_info=None, output_dir=tmp_path)
+        # Should NOT have a backend segment -- just benchmark_ then timestamp
+        name = filepath.stem  # e.g. "benchmark_20260314_120000"
+        parts = name.split("_")
+        assert parts[0] == "benchmark"
+        # Timestamp part: YYYYMMDD
+        assert len(parts[1]) == 8
+
+
+class TestJsonMetadata:
+    """Test that JSON output includes backend_name in metadata."""
+
+    def test_json_contains_backend_name(self, tmp_path):
+        """JSON metadata includes backend_name field."""
+        from llm_benchmark.exporters import export_json
+
+        summary = _make_summary([_make_result()])
+        si = _make_system_info("llama-cpp", "b1234")
+        filepath = export_json([summary], system_info=si, output_dir=tmp_path)
+        data = json.loads(filepath.read_text())
+        assert data["system_info"]["backend_name"] == "llama-cpp"
+        assert data["system_info"]["backend_version"] == "b1234"
+
+    def test_json_contains_backend_version(self, tmp_path):
+        """JSON metadata includes backend_version field."""
+        from llm_benchmark.exporters import export_json
+
+        summary = _make_summary([_make_result()])
+        si = _make_system_info("ollama", "0.6.1")
+        filepath = export_json([summary], system_info=si, output_dir=tmp_path)
+        data = json.loads(filepath.read_text())
+        assert data["system_info"]["backend_version"] == "0.6.1"
+
+
+class TestMarkdownBackendHeader:
+    """Test that Markdown report header shows backend name."""
+
+    def test_markdown_header_includes_backend(self, tmp_path):
+        """Markdown report title includes backend name in parentheses."""
+        from llm_benchmark.exporters import export_markdown
+
+        summary = _make_summary([_make_result()])
+        si = _make_system_info("llama-cpp", "b1234")
+        filepath = export_markdown([summary], system_info=si, output_dir=tmp_path)
+        content = filepath.read_text()
+        assert "# LLM Benchmark Results (llama-cpp)" in content
+
+    def test_markdown_header_has_backend_field(self, tmp_path):
+        """Markdown header line includes **Backend:** field."""
+        from llm_benchmark.exporters import export_markdown
+
+        summary = _make_summary([_make_result()])
+        si = _make_system_info("ollama", "0.6.1")
+        filepath = export_markdown([summary], system_info=si, output_dir=tmp_path)
+        content = filepath.read_text()
+        assert "**Backend:** ollama 0.6.1" in content
+
+    def test_markdown_without_system_info_no_backend(self, tmp_path):
+        """Without system_info, Markdown title has no backend label."""
+        from llm_benchmark.exporters import export_markdown
+
+        summary = _make_summary([_make_result()])
+        filepath = export_markdown([summary], system_info=None, output_dir=tmp_path)
+        content = filepath.read_text()
+        assert "# LLM Benchmark Results\n" in content
+
+
+class TestKnownIssuesHints:
+    """Test the known-issues hint table in runner."""
+
+    def test_hint_for_ollama_timeout(self):
+        from llm_benchmark.runner import get_known_issue_hint
+
+        hint = get_known_issue_hint("ollama", "Timeout after 200s")
+        assert hint is not None
+        assert "timeout" in hint.lower() or "smaller" in hint.lower()
+
+    def test_hint_for_llama_cpp_connection(self):
+        from llm_benchmark.runner import get_known_issue_hint
+
+        hint = get_known_issue_hint("llama-cpp", "Connection refused")
+        assert hint is not None
+        assert "llama-server" in hint
+
+    def test_no_hint_for_unknown_pattern(self):
+        from llm_benchmark.runner import get_known_issue_hint
+
+        hint = get_known_issue_hint("ollama", "some random error")
+        assert hint is None

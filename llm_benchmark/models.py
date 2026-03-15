@@ -1,10 +1,10 @@
-"""Pydantic data models for Ollama responses and benchmark results."""
+"""Pydantic data models for benchmark results."""
 
 from __future__ import annotations
 
-from datetime import datetime
+from pydantic import BaseModel
 
-from pydantic import BaseModel, model_validator
+from llm_benchmark.backends import BackendResponse
 
 
 class Message(BaseModel):
@@ -14,43 +14,13 @@ class Message(BaseModel):
     content: str
 
 
-class OllamaResponse(BaseModel):
-    """Validated Ollama API response with timing and token metrics.
-
-    Unlike the original benchmark.py validator, this does NOT print warnings
-    as a side effect. Instead, it silently normalizes prompt_eval_count=-1
-    to 0 and sets the prompt_cached flag.
-    """
-
-    model: str
-    created_at: datetime
-    message: Message
-    done: bool
-    total_duration: int
-    load_duration: int = 0
-    prompt_eval_count: int = -1
-    prompt_eval_duration: int
-    eval_count: int
-    eval_duration: int
-    prompt_cached: bool = False
-
-    @model_validator(mode="before")
-    @classmethod
-    def handle_prompt_caching(cls, data: dict) -> dict:
-        """Normalize prompt_eval_count=-1 (caching) to 0 and flag it."""
-        if isinstance(data, dict) and data.get("prompt_eval_count", -1) == -1:
-            data["prompt_eval_count"] = 0
-            data["prompt_cached"] = True
-        return data
-
-
 class BenchmarkResult(BaseModel):
     """Result of a single benchmark run (one prompt against one model)."""
 
     model: str
     prompt: str
     success: bool
-    response: OllamaResponse | None = None
+    response: BackendResponse | None = None
     error: str | None = None
     prompt_cached: bool = False
 
@@ -74,7 +44,8 @@ class SystemInfo(BaseModel):
     gpu_vram_gb: float | None = None
     os_name: str
     python_version: str
-    ollama_version: str
+    backend_name: str
+    backend_version: str
 
 
 class ConcurrentBatchResult(BaseModel):
@@ -109,10 +80,3 @@ class SweepModelResult(BaseModel):
     model: str
     configs: list[SweepConfigResult]
     best_config: SweepConfigResult | None = None
-
-
-def _ns_to_sec(ns: int) -> float:
-    """Convert nanoseconds to seconds."""
-    return ns / 1_000_000_000
-
-

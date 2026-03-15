@@ -1,6 +1,6 @@
-"""Async concurrent benchmarking orchestration.
+"""Concurrent benchmarking orchestration using ThreadPoolExecutor.
 
-Fires N parallel requests to the same Ollama model using asyncio.gather
+Fires N parallel requests to the same model using a Backend instance
 and measures wall-time aggregate throughput. Each request has its own
 try/except so failures are isolated.
 
@@ -12,12 +12,11 @@ Exports:
 
 from __future__ import annotations
 
-import asyncio
+import concurrent.futures
 import statistics
 import time
 
-import ollama
-
+from llm_benchmark.backends import Backend
 from llm_benchmark.config import (
     DEFAULT_CONCURRENT,
     DEFAULT_TIMEOUT,
@@ -26,8 +25,6 @@ from llm_benchmark.config import (
 from llm_benchmark.models import (
     BenchmarkResult,
     ConcurrentBatchResult,
-    OllamaResponse,
-    _ns_to_sec,
 )
 from llm_benchmark.runner import warmup_model
 
@@ -51,36 +48,27 @@ def auto_detect_concurrency(
     return 2
 
 
-async def _single_request(
-    client: ollama.AsyncClient,
+def _single_request(
+    backend: Backend,
     model: str,
     prompt: str,
     request_id: int,
     num_workers: int,
     console,
 ) -> BenchmarkResult:
-    """Execute a single async chat request and return a BenchmarkResult.
+    """Execute a single chat request via Backend and return a BenchmarkResult.
 
     On success, prints a live per-request summary line.
     On failure, returns BenchmarkResult(success=False) without stopping others.
     """
     try:
-        raw_response = await client.chat(
+        response = backend.chat(
             model=model,
             messages=[{"role": "user", "content": prompt}],
         )
 
-        # Convert SDK response to dict for Pydantic validation
-        if hasattr(raw_response, "model_dump"):
-            raw_response = raw_response.model_dump()
-        elif hasattr(raw_response, "dict"):
-            raw_response = raw_response.dict()
-
-        response = OllamaResponse.model_validate(raw_response)
-
         # Compute per-request throughput
-        eval_dur_s = _ns_to_sec(response.eval_duration)
-        rate = response.eval_count / eval_dur_s if eval_dur_s > 0 else 0
+        rate = response.eval_count / response.eval_duration if response.eval_duration > 0 else 0
 
         console.print(
             f"    Request {request_id + 1}/{num_workers}: "
@@ -108,27 +96,27 @@ async def _single_request(
         )
 
 
-async def _run_batch(
+def _run_batch(
+    backend: Backend,
     model: str,
     prompt: str,
     n: int,
     timeout: int,
 ) -> ConcurrentBatchResult:
-    """Fire N parallel requests via asyncio.gather, measure wall time.
+    """Fire N parallel requests via ThreadPoolExecutor, measure wall time.
 
     Each request runs in its own try/except via _single_request, so
-    gather does NOT need return_exceptions.
+    failures are isolated.
     """
     console = get_console()
 
-    async with ollama.AsyncClient() as client:
-        tasks = [
-            _single_request(client, model, prompt, i, n, console)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=n) as pool:
+        wall_start = time.perf_counter()
+        futures = [
+            pool.submit(_single_request, backend, model, prompt, i, n, console)
             for i in range(n)
         ]
-
-        wall_start = time.perf_counter()
-        results = await asyncio.gather(*tasks)
+        results = [f.result(timeout=timeout) for f in concurrent.futures.as_completed(futures)]
         wall_time_s = time.perf_counter() - wall_start
 
     successful = [r for r in results if r.success and r.response is not None]
@@ -142,9 +130,8 @@ async def _run_batch(
     # Average per-request throughput: mean of individual rates
     per_request_rates = []
     for r in successful:
-        eval_dur_s = _ns_to_sec(r.response.eval_duration)
-        if eval_dur_s > 0:
-            per_request_rates.append(r.response.eval_count / eval_dur_s)
+        if r.response.eval_duration > 0:
+            per_request_rates.append(r.response.eval_count / r.response.eval_duration)
 
     avg_request_throughput_ts = (
         statistics.mean(per_request_rates) if per_request_rates else 0.0
@@ -162,15 +149,17 @@ async def _run_batch(
 
 
 def run_concurrent_batch(
+    backend: Backend,
     model: str,
     prompt: str,
     n: int = DEFAULT_CONCURRENT,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> ConcurrentBatchResult:
-    """Sync wrapper: fire N concurrent async requests to Ollama.
+    """Fire N concurrent requests to the backend via ThreadPoolExecutor.
 
     Args:
-        model: Ollama model name.
+        backend: Backend instance.
+        model: Model name.
         prompt: Prompt text.
         n: Number of concurrent requests.
         timeout: Per-request timeout in seconds.
@@ -178,10 +167,11 @@ def run_concurrent_batch(
     Returns:
         ConcurrentBatchResult with wall-time and per-request metrics.
     """
-    return asyncio.run(_run_batch(model, prompt, n, timeout))
+    return _run_batch(backend, model, prompt, n, timeout)
 
 
 def benchmark_model_concurrent(
+    backend: Backend,
     model_name: str,
     prompts: list[str],
     num_workers: int = DEFAULT_CONCURRENT,
@@ -196,7 +186,8 @@ def benchmark_model_concurrent(
     fires a concurrent batch of num_workers parallel requests.
 
     Args:
-        model_name: Ollama model name.
+        backend: Backend instance.
+        model_name: Model name.
         prompts: List of prompt strings.
         num_workers: Number of concurrent requests per batch.
         runs_per_prompt: How many times to repeat each prompt.
@@ -212,7 +203,7 @@ def benchmark_model_concurrent(
 
     # Warmup once
     if not skip_warmup:
-        warmup_model(model_name, timeout)
+        warmup_model(backend, model_name, timeout)
     else:
         console.print(
             "  [dim]Warmup skipped -- first run may include model load time[/dim]"
@@ -233,6 +224,7 @@ def benchmark_model_concurrent(
             )
 
             batch = run_concurrent_batch(
+                backend=backend,
                 model=model_name,
                 prompt=prompt,
                 n=num_workers,

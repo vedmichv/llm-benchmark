@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from llm_benchmark.backends import BackendResponse
 from llm_benchmark.models import SweepConfigResult, SweepModelResult
 from llm_benchmark.sweep import (
     build_sweep_configs,
@@ -15,33 +16,22 @@ from llm_benchmark.sweep import (
 class TestGetModelLayers:
     """Tests for get_model_layers()."""
 
-    @patch("llm_benchmark.sweep.ollama")
-    def test_returns_block_count(self, mock_ollama: MagicMock) -> None:
-        """Should extract block_count from modelinfo keys."""
-        mock_response = MagicMock()
-        mock_response.modelinfo = {
-            "general.architecture": "llama",
-            "llama.block_count": 32,
-            "llama.context_length": 4096,
-        }
-        mock_ollama.show.return_value = mock_response
-        assert get_model_layers("llama3:8b") == 32
+    def test_returns_block_count(self) -> None:
+        """Should extract block_count via backend.get_model_layers()."""
+        backend = MagicMock()
+        backend.get_model_layers.return_value = 32
+        assert get_model_layers(backend, "llama3:8b") == 32
 
-    @patch("llm_benchmark.sweep.ollama")
-    def test_returns_none_when_missing(self, mock_ollama: MagicMock) -> None:
-        """Should return None when no block_count key exists."""
-        mock_response = MagicMock()
-        mock_response.modelinfo = {
-            "general.architecture": "llama",
-        }
-        mock_ollama.show.return_value = mock_response
-        assert get_model_layers("some-model") is None
+    def test_returns_none_when_no_method(self) -> None:
+        """Should return None when backend has no get_model_layers method."""
+        backend = MagicMock(spec=[])  # no get_model_layers attr
+        assert get_model_layers(backend, "some-model") is None
 
-    @patch("llm_benchmark.sweep.ollama")
-    def test_returns_none_on_exception(self, mock_ollama: MagicMock) -> None:
-        """Should return None if ollama.show() raises."""
-        mock_ollama.show.side_effect = Exception("Connection refused")
-        assert get_model_layers("bad-model") is None
+    def test_returns_none_on_exception(self) -> None:
+        """Should return None if backend.get_model_layers() raises."""
+        backend = MagicMock()
+        backend.get_model_layers.side_effect = Exception("Connection refused")
+        assert get_model_layers(backend, "bad-model") is None
 
 
 class TestBuildSweepConfigs:
@@ -130,51 +120,45 @@ class TestFailedConfigContinues:
     """Tests that failed configs don't stop the sweep."""
 
     @patch("llm_benchmark.sweep._get_gpu_info")
-    @patch("llm_benchmark.sweep.get_model_layers")
     @patch("llm_benchmark.sweep.unload_model")
     @patch("llm_benchmark.sweep.warmup_model")
-    @patch("llm_benchmark.sweep.ollama")
     def test_failed_config_recorded(
         self,
-        mock_ollama: MagicMock,
         mock_warmup: MagicMock,
         mock_unload: MagicMock,
-        mock_get_layers: MagicMock,
         mock_gpu_info: MagicMock,
     ) -> None:
         """A config that raises should be recorded with success=False."""
         mock_gpu_info.return_value = ("No dedicated GPU", None)
-        mock_get_layers.return_value = None  # No GPU layers
         mock_warmup.return_value = True
         mock_unload.return_value = True
 
         call_count = 0
 
-        def chat_side_effect(**kwargs):
+        def chat_side_effect(model, messages, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 2:
                 raise Exception("CUDA out of memory")
-            # Return a mock response for successful calls
-            resp = MagicMock()
-            resp.eval_count = 50
-            resp.eval_duration = 1_000_000_000  # 1 second
-            resp.total_duration = 2_000_000_000
-            resp.prompt_eval_count = 10
-            resp.prompt_eval_duration = 500_000_000
-            resp.load_duration = 100_000_000
-            resp.model = "test"
-            resp.created_at = "2024-01-01T00:00:00Z"
-            resp.done = True
-            resp.message = MagicMock()
-            resp.message.role = "assistant"
-            resp.message.content = "Test response"
-            return resp
+            # Return a BackendResponse for successful calls
+            return BackendResponse(
+                model=model,
+                content="Test response",
+                done=True,
+                eval_count=50,
+                eval_duration=1.0,
+                total_duration=2.0,
+                prompt_eval_count=10,
+                prompt_eval_duration=0.5,
+                load_duration=0.1,
+            )
 
-        mock_ollama.chat.side_effect = chat_side_effect
-        mock_ollama.Options = MagicMock(side_effect=lambda **kw: kw)
+        backend = MagicMock()
+        backend.chat.side_effect = chat_side_effect
+        # No get_model_layers method -> block_count = None
+        del backend.get_model_layers
 
-        result = run_sweep_for_model("test-model", timeout=30, skip_warmup=True)
+        result = run_sweep_for_model(backend, "test-model", timeout=30, skip_warmup=True)
 
         # Should have 4 configs (no GPU = num_ctx only)
         assert len(result.configs) == 4

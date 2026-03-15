@@ -1,8 +1,8 @@
 """Result exporters: JSON, CSV, and Markdown writers.
 
 All functions create the output directory if it doesn't exist and use
-timestamped filenames (benchmark_YYYYMMDD_HHMMSS.{ext} for standard/concurrent,
-sweep_YYYYMMDD_HHMMSS.{ext} for sweep results).
+timestamped filenames (benchmark_{backend}_YYYYMMDD_HHMMSS.{ext} for
+standard/concurrent, sweep_{backend}_YYYYMMDD_HHMMSS.{ext} for sweep results).
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from llm_benchmark.models import ModelSummary, SystemInfo, _ns_to_sec
+from llm_benchmark.models import ModelSummary, SystemInfo
 
 _RESULTS_GITIGNORE = """\
 # Benchmark result files -- do not commit
@@ -46,6 +46,17 @@ def _timestamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
+def _filename(prefix: str, ext: str, system_info: SystemInfo | None = None) -> str:
+    """Build a filename with optional backend name: {prefix}_{backend}_{ts}.{ext}.
+
+    Falls back to {prefix}_{ts}.{ext} when system_info is None.
+    """
+    ts = _timestamp()
+    if system_info is not None:
+        return f"{prefix}_{system_info.backend_name}_{ts}.{ext}"
+    return f"{prefix}_{ts}.{ext}"
+
+
 def _result_to_dict(result) -> dict:
     """Convert a BenchmarkResult to a serializable dict."""
     d = {
@@ -59,16 +70,16 @@ def _result_to_dict(result) -> dict:
         r = result.response
         d["prompt_eval_count"] = r.prompt_eval_count
         d["eval_count"] = r.eval_count
-        d["prompt_eval_duration_s"] = round(_ns_to_sec(r.prompt_eval_duration), 4)
-        d["eval_duration_s"] = round(_ns_to_sec(r.eval_duration), 4)
-        d["total_duration_s"] = round(_ns_to_sec(r.total_duration), 4)
-        d["load_duration_s"] = round(_ns_to_sec(r.load_duration), 4)
+        d["prompt_eval_duration_s"] = round(r.prompt_eval_duration, 4)
+        d["eval_duration_s"] = round(r.eval_duration, 4)
+        d["total_duration_s"] = round(r.total_duration, 4)
+        d["load_duration_s"] = round(r.load_duration, 4)
         # Compute per-run rates
         d["prompt_eval_ts"] = round(
-            r.prompt_eval_count / _ns_to_sec(r.prompt_eval_duration), 2
+            r.prompt_eval_count / r.prompt_eval_duration, 2
         ) if r.prompt_eval_duration > 0 else 0
         d["response_ts"] = round(
-            r.eval_count / _ns_to_sec(r.eval_duration), 2
+            r.eval_count / r.eval_duration, 2
         ) if r.eval_duration > 0 else 0
     return d
 
@@ -93,7 +104,7 @@ def export_json(
         Path to the written JSON file.
     """
     out_dir = _ensure_dir(output_dir)
-    filepath = out_dir / f"benchmark_{_timestamp()}.json"
+    filepath = out_dir / _filename("benchmark", "json", system_info)
 
     data = {
         "generated": datetime.now().isoformat(),
@@ -134,7 +145,7 @@ def export_csv(
         Path to the written CSV file.
     """
     out_dir = _ensure_dir(output_dir)
-    filepath = out_dir / f"benchmark_{_timestamp()}.csv"
+    filepath = out_dir / _filename("benchmark", "csv", system_info)
 
     with open(filepath, "w", newline="") as f:
         writer = csv.writer(f)
@@ -146,7 +157,7 @@ def export_csv(
             writer.writerow(["RAM", f"{system_info.ram_gb:.1f} GB"])
             writer.writerow(["GPU", system_info.gpu])
             writer.writerow(["OS", system_info.os_name])
-            writer.writerow(["Ollama", system_info.ollama_version])
+            writer.writerow(["Backend", f"{system_info.backend_name} {system_info.backend_version}"])
             writer.writerow([])
 
         # Column headers
@@ -168,12 +179,12 @@ def export_csv(
                 if run.success and run.response:
                     r = run.response
                     prompt_ts = (
-                        r.prompt_eval_count / _ns_to_sec(r.prompt_eval_duration)
+                        r.prompt_eval_count / r.prompt_eval_duration
                         if r.prompt_eval_duration > 0
                         else 0
                     )
                     response_ts = (
-                        r.eval_count / _ns_to_sec(r.eval_duration)
+                        r.eval_count / r.eval_duration
                         if r.eval_duration > 0
                         else 0
                     )
@@ -186,7 +197,7 @@ def export_csv(
                         r.eval_count,
                         f"{prompt_ts:.2f}",
                         f"{response_ts:.2f}",
-                        f"{_ns_to_sec(r.total_duration):.2f}",
+                        f"{r.total_duration:.2f}",
                         "",
                     ])
                 else:
@@ -227,15 +238,18 @@ def export_markdown(
     from llm_benchmark.display import render_text_bar_chart
 
     out_dir = _ensure_dir(output_dir)
-    filepath = out_dir / f"benchmark_{_timestamp()}.md"
+    filepath = out_dir / _filename("benchmark", "md", system_info)
 
+    backend_label = f" ({system_info.backend_name})" if system_info else ""
     lines: list[str] = []
-    lines.append("# LLM Benchmark Results\n")
+    lines.append(f"# LLM Benchmark Results{backend_label}\n")
     header_parts = [
         f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"**Models:** {len(results)}",
         f"**Mode:** {mode.title()}",
     ]
+    if system_info:
+        header_parts.append(f"**Backend:** {system_info.backend_name} {system_info.backend_version}")
     lines.append(" | ".join(header_parts) + "\n")
 
     # One-line system information
@@ -288,13 +302,13 @@ def export_markdown(
             if run.success and run.response:
                 r = run.response
                 resp_ts = (
-                    r.eval_count / _ns_to_sec(r.eval_duration)
+                    r.eval_count / r.eval_duration
                     if r.eval_duration > 0
                     else 0
                 )
                 lines.append(
                     f"   - {r.eval_count} tokens @ {resp_ts:.1f} t/s, "
-                    f"{_ns_to_sec(r.total_duration):.2f}s total"
+                    f"{r.total_duration:.2f}s total"
                 )
             else:
                 lines.append(f"   - Error: {run.error}")
@@ -325,7 +339,7 @@ def export_concurrent_json(
         Path to the written JSON file.
     """
     out_dir = _ensure_dir(output_dir)
-    filepath = out_dir / f"benchmark_{_timestamp()}.json"
+    filepath = out_dir / _filename("concurrent", "json", system_info)
 
     # Determine worker count from first batch
     num_workers = 0
@@ -381,7 +395,7 @@ def export_concurrent_csv(
         Path to the written CSV file.
     """
     out_dir = _ensure_dir(output_dir)
-    filepath = out_dir / f"benchmark_{_timestamp()}.csv"
+    filepath = out_dir / _filename("concurrent", "csv", system_info)
 
     with open(filepath, "w", newline="") as f:
         writer = csv.writer(f)
@@ -393,7 +407,7 @@ def export_concurrent_csv(
             writer.writerow(["RAM", f"{system_info.ram_gb:.1f} GB"])
             writer.writerow(["GPU", system_info.gpu])
             writer.writerow(["OS", system_info.os_name])
-            writer.writerow(["Ollama", system_info.ollama_version])
+            writer.writerow(["Backend", f"{system_info.backend_name} {system_info.backend_version}"])
             writer.writerow(["Mode", "concurrent"])
             writer.writerow([])
 
@@ -439,7 +453,7 @@ def export_concurrent_markdown(
     from llm_benchmark.display import render_text_bar_chart
 
     out_dir = _ensure_dir(output_dir)
-    filepath = out_dir / f"benchmark_{_timestamp()}.md"
+    filepath = out_dir / _filename("concurrent", "md", system_info)
 
     # Determine worker count
     num_workers = 0
@@ -454,13 +468,16 @@ def export_concurrent_markdown(
         for batch in model_batches:
             model_names.add(batch.model)
 
+    backend_label = f" ({system_info.backend_name})" if system_info else ""
     lines: list[str] = []
-    lines.append("# LLM Concurrent Benchmark Results\n")
+    lines.append(f"# LLM Concurrent Benchmark Results{backend_label}\n")
     header_parts = [
         f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"**Models:** {len(model_names)}",
         f"**Mode:** Concurrent ({num_workers} workers)",
     ]
+    if system_info:
+        header_parts.append(f"**Backend:** {system_info.backend_name} {system_info.backend_version}")
     lines.append(" | ".join(header_parts) + "\n")
 
     # One-line system information
@@ -538,7 +555,7 @@ def export_sweep_json(
         Path to the written JSON file.
     """
     out_dir = _ensure_dir(output_dir)
-    filepath = out_dir / f"sweep_{_timestamp()}.json"
+    filepath = out_dir / _filename("sweep", "json", system_info)
 
     data = {
         "generated": datetime.now().isoformat(),
@@ -598,7 +615,7 @@ def export_sweep_csv(
         Path to the written CSV file.
     """
     out_dir = _ensure_dir(output_dir)
-    filepath = out_dir / f"sweep_{_timestamp()}.csv"
+    filepath = out_dir / _filename("sweep", "csv", system_info)
 
     with open(filepath, "w", newline="") as f:
         writer = csv.writer(f)
@@ -610,7 +627,7 @@ def export_sweep_csv(
             writer.writerow(["RAM", f"{system_info.ram_gb:.1f} GB"])
             writer.writerow(["GPU", system_info.gpu])
             writer.writerow(["OS", system_info.os_name])
-            writer.writerow(["Ollama", system_info.ollama_version])
+            writer.writerow(["Backend", f"{system_info.backend_name} {system_info.backend_version}"])
             writer.writerow(["Mode", "sweep"])
             writer.writerow([])
 
@@ -678,15 +695,18 @@ def export_sweep_markdown(
     from llm_benchmark.display import render_text_bar_chart
 
     out_dir = _ensure_dir(output_dir)
-    filepath = out_dir / f"sweep_{_timestamp()}.md"
+    filepath = out_dir / _filename("sweep", "md", system_info)
 
+    backend_label = f" ({system_info.backend_name})" if system_info else ""
     lines: list[str] = []
-    lines.append("# LLM Parameter Sweep Results\n")
+    lines.append(f"# LLM Parameter Sweep Results{backend_label}\n")
     header_parts = [
         f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"**Models:** {len(sweep_results)}",
         "**Mode:** Sweep",
     ]
+    if system_info:
+        header_parts.append(f"**Backend:** {system_info.backend_name} {system_info.backend_version}")
     lines.append(" | ".join(header_parts) + "\n")
 
     # One-line system information
