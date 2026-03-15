@@ -624,6 +624,12 @@ def main(argv: list[str] | None = None) -> int:
             from llm_benchmark.preflight import run_preflight_checks
 
             backend_name, port, model_path = select_backend_interactive()
+            if backend_name == "all":
+                # Compare shortcut from backend selector -- skip to comparison
+                from llm_benchmark.menu import _mode_compare
+                args = _mode_compare("ollama")
+                set_debug(False)
+                return _handle_run(args)
             backend = create_backend(backend_name, port=port)
             if model_path is not None:
                 backend._model_path = model_path  # type: ignore[attr-defined]
