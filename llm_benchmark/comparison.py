@@ -289,6 +289,7 @@ def _build_comparison_result(
     for model in models_list:
         best_rate = -1.0
         best_backend = ""
+        backend_count = 0
 
         for bname in backend_names:
             summary = next(
@@ -296,6 +297,7 @@ def _build_comparison_result(
                 None,
             )
             if summary:
+                backend_count += 1
                 results.append(
                     BackendModelResult(
                         backend=bname,
@@ -311,7 +313,9 @@ def _build_comparison_result(
 
         if best_backend:
             winner_per_model[model] = best_backend
-            wins[best_backend] = wins.get(best_backend, 0) + 1
+            # Only count wins for models present on 2+ backends
+            if backend_count >= 2:
+                wins[best_backend] = wins.get(best_backend, 0) + 1
 
     # Overall winner: backend with most wins
     overall_winner = max(wins, key=lambda k: wins[k]) if wins else ""
@@ -403,10 +407,12 @@ def render_comparison_matrix(
             else:
                 row.append("--")
 
-        if rates:
+        if len(rates) >= 2:
             winner = max(rates, key=lambda k: rates[k])
             wins[winner] += 1
             row.append(winner.title())
+        elif len(rates) == 1:
+            row.append("--")
         else:
             row.append("--")
 
@@ -414,13 +420,17 @@ def render_comparison_matrix(
 
     console.print(table)
 
-    # Overall recommendation
+    # Overall recommendation (only models on 2+ backends)
     total = sum(wins.values())
     if total > 0:
         overall_winner = max(wins, key=lambda k: wins[k])
         console.print(
             f"\n  Fastest backend: [bold]{overall_winner.title()}[/bold] "
-            f"({wins[overall_winner]}/{total} models)"
+            f"({wins[overall_winner]}/{total} comparable models)"
+        )
+    else:
+        console.print(
+            "\n  [dim]No models found on multiple backends for comparison[/dim]"
         )
 
 
