@@ -158,6 +158,11 @@ def run_comparison(
         if status.name == "llama-cpp":
             models = _prepare_llamacpp_models(backend, models, all_backend_results)
 
+        # For non-Ollama backends: match model names to Ollama canonical names
+        if status.name != "ollama" and "ollama" in all_backend_results:
+            ollama_names = [s.model for s in all_backend_results["ollama"]]
+            models = _match_to_ollama_names(models, ollama_names)
+
         summaries = []
         for model_info in models:
             model_name = model_info["model"]
@@ -186,6 +191,27 @@ def run_comparison(
         all_backend_results[status.name] = summaries
 
     return _build_comparison_result(all_backend_results)
+
+
+def _match_to_ollama_names(
+    models: list[dict], ollama_names: list[str]
+) -> list[dict]:
+    """Match non-Ollama model names to Ollama canonical names.
+
+    E.g. "llama-3.2-1b-instruct" (LM Studio) -> "llama3.2:1b" (Ollama).
+    """
+    for model_info in models:
+        if "_canonical_name" in model_info:
+            continue
+        name = model_info["model"].lower().replace("-", "").replace("_", "").replace(".", "")
+        for ollama_name in ollama_names:
+            parts = ollama_name.split(":")
+            base = parts[0].lower().replace(".", "").replace("-", "")
+            tag = parts[-1].lower() if len(parts) > 1 else ""
+            if base in name and (not tag or tag in name):
+                model_info["_canonical_name"] = ollama_name
+                break
+    return models
 
 
 def _prepare_llamacpp_models(
